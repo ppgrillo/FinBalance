@@ -1,0 +1,8 @@
+{
+  "name": "FinBalance",
+  "description": "A comprehensive personal finance app with AI-powered expense tracking and budgeting.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
