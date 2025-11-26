@@ -11,6 +11,7 @@ import { Budgets } from './pages/Budgets';
 import { RecurringExpenses } from './pages/RecurringExpenses';
 import { ExpensesList } from './pages/ExpensesList';
 import { Profile } from './pages/Profile';
+import { ToastProvider } from './context/ToastContext';
 import { Goals } from './pages/Goals';
 import { Wallet } from './pages/Wallet';
 import { authService } from './services/authService';
@@ -77,9 +78,9 @@ export default function App() {
     // Listen for Auth Changes (Login, Logout, Token Refresh)
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-         await refreshUser();
+        await refreshUser();
       } else if (event === 'SIGNED_OUT') {
-         setUser(null);
+        setUser(null);
       }
     });
 
@@ -101,22 +102,25 @@ export default function App() {
   }
 
   return (
-    <Router>
-      <Layout mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen}>
-        <Routes>
-          <Route path="/" element={<Dashboard user={user} onMenuClick={() => setMobileMenuOpen(true)} />} />
-          <Route path="/budgets" element={<Budgets />} />
-          <Route path="/recurring" element={<RecurringExpenses />} />
-          <Route path="/expenses" element={<ExpensesList />} />
-          <Route path="/add" element={<AddExpense />} />
-          <Route path="/stats" element={<Stats user={user} />} />
-          <Route path="/chat" element={<ChatAI />} />
-          <Route path="/profile" element={<Profile user={user} onLogout={() => setUser(null)} onUpdate={refreshUser} />} />
-          <Route path="/goals" element={<Goals />} />
-          <Route path="/wallet" element={<Wallet />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Layout>
-    </Router>
+    <ToastProvider>
+      <Router>
+        <Layout mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen}>
+          <Routes>
+            <Route path="/" element={<Dashboard user={user} onMenuClick={() => setMobileMenuOpen(true)} />} />
+            <Route path="/budgets" element={<Budgets user={user} />} />
+            <Route path="/recurring" element={<RecurringExpenses />} />
+            <Route path="/expenses" element={<ExpensesList />} />
+            <Route path="/add" element={<AddExpense />} />
+            <Route path="/stats" element={<Stats user={user} />} />
+            <Route path="/chat" element={<ChatAI />} />
+            <Route path="/profile" element={<Profile user={user} onUpdate={refreshUser} />} />
+            <Route path="/goals" element={<Goals />} />
+            <Route path="/wallet" element={<Wallet />} />
+            <Route path="/login" element={<Navigate to="/" />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Layout>
+      </Router>
+    </ToastProvider>
   );
 }

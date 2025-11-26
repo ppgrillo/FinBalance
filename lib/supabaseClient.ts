@@ -21,4 +21,37 @@ if (!isValidUrl(PROJECT_URL)) {
   console.warn('⚠️ Credenciales de Supabase no configuradas en lib/supabaseClient.ts. La base de datos no funcionará.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+const customStorage = {
+  getItem: (key: string) => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored;
+    } catch (error) {
+      console.error('Error reading from localStorage:', error);
+      return null;
+    }
+  },
+  setItem: (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (error) {
+      console.error('Error writing to localStorage:', error);
+    }
+  },
+  removeItem: (key: string) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.error('Error removing from localStorage:', error);
+    }
+  },
+};
+
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    storage: customStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+});
