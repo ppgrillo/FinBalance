@@ -217,7 +217,8 @@ export const geminiService = {
    */
   analyzeExpense: async (
     textInput?: string,
-    imageBase64?: string
+    imageBase64?: string,
+    availableCategories: string[] = []
   ): Promise<Partial<Expense>> => {
     try {
       if (!ai) {
@@ -226,6 +227,18 @@ export const geminiService = {
       const model = "gemini-2.5-flash";
 
       const parts: any[] = [];
+      const categoriesContext = availableCategories.length > 0
+        ? `Categorías existentes: ${availableCategories.join(', ')}.`
+        : "";
+
+      const systemPrompt = `
+        Analiza el gasto.
+        ${categoriesContext}
+        INSTRUCCIÓN: Prioriza SIEMPRE usar una de las categorías existentes si el gasto encaja (aunque sea vagamente).
+        Solo sugiere una categoría nueva si el concepto es DRASTICAMENTE diferente a las existentes.
+        Ejemplo: Si existe 'Salidas' y el gasto es 'Cine', usa 'Salidas'. No crees 'Entretenimiento'.
+      `;
+
       if (imageBase64) {
         parts.push({
           inlineData: {
@@ -233,9 +246,9 @@ export const geminiService = {
             data: imageBase64
           }
         });
-        parts.push({ text: "Analiza este ticket o recibo. Extrae el total, la categoría y una breve descripción." });
+        parts.push({ text: `${systemPrompt} Extrae total, categoría y descripción.` });
       } else if (textInput) {
-        parts.push({ text: `Analiza este gasto: "${textInput}". Extrae monto, categoría y descripción.` });
+        parts.push({ text: `${systemPrompt} Gasto: "${textInput}". Extrae monto, categoría y descripción.` });
       }
 
       const response = await ai.models.generateContent({
@@ -247,7 +260,7 @@ export const geminiService = {
             type: Type.OBJECT,
             properties: {
               amount: { type: Type.NUMBER },
-              category: { type: Type.STRING, enum: Object.values(CategoryType) },
+              category: { type: Type.STRING, description: "Category from the list OR a new one if absolutely necessary." },
               description: { type: Type.STRING },
               date: { type: Type.STRING, description: "ISO Date string if found, else today" }
             },

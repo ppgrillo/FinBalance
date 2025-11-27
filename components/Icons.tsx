@@ -29,7 +29,8 @@ import {
   Target,
   CreditCard,
   Landmark,
-  BrainCircuit
+  BrainCircuit,
+  Star
 } from 'lucide-react';
 
 export const Icons = {
@@ -65,6 +66,7 @@ export const Icons = {
   CreditCard,
   Bank: Landmark,
   Brain: BrainCircuit,
+  Star,
   Google: (props: any) => (
     <svg {...props} viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
       <g transform="matrix(1, 0, 0, 1, 27.009001, -39.23856)">

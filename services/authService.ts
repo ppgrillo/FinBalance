@@ -9,7 +9,8 @@ export const authService = {
         email,
         password,
         options: {
-          data: { full_name: name }
+          data: { full_name: name },
+          emailRedirectTo: window.location.origin
         }
       });
 

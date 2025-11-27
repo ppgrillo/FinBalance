@@ -815,6 +815,17 @@ export const Dashboard: React.FC<Props> = ({ user, onMenuClick }) => {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                type={confirmModal.type}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                confirmText="Sí, continuar"
+                cancelText="Cancelar"
+            />
         </div>
     );
 };

@@ -15,28 +15,29 @@ const mapExpense = (row: any): AppExpense => ({
 const mapAccount = (row: any): Account => ({
   id: row.id,
   name: row.name,
-  type: row.type, 
+  type: row.type,
   balance: Number(row.balance),
   limit: row.credit_limit ? Number(row.credit_limit) : undefined,
   color: row.color,
-  lastDigits: row.last_digits
+  lastDigits: row.last_digits,
+  isDefault: row.is_default
 });
 
 const mapGoal = (row: any): FinancialGoal => {
   // Calculate dynamic monthly contribution
   let calculatedContribution = 0;
   if (row.deadline && row.target_amount > row.current_amount) {
-      const now = new Date();
-      const deadlineDate = new Date(row.deadline);
-      const diffTime = deadlineDate.getTime() - now.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-      const months = Math.max(0.5, diffDays / 30); // Prevent divide by zero or negative months
-      
-      if (diffDays > 0) {
-          calculatedContribution = Math.ceil((row.target_amount - row.current_amount) / months);
-      } else {
-          calculatedContribution = row.target_amount - row.current_amount;
-      }
+    const now = new Date();
+    const deadlineDate = new Date(row.deadline);
+    const diffTime = deadlineDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const months = Math.max(0.5, diffDays / 30); // Prevent divide by zero or negative months
+
+    if (diffDays > 0) {
+      calculatedContribution = Math.ceil((row.target_amount - row.current_amount) / months);
+    } else {
+      calculatedContribution = row.target_amount - row.current_amount;
+    }
   }
 
   return {
@@ -62,156 +63,156 @@ const mapRecurring = (row: any): RecurringItem => ({
 });
 
 export const dbService = {
-  
+
   // --- USER PROFILE & CONFIG ---
   updateUserProfile: async (userId: string, updates: Partial<User>): Promise<{ success: boolean; synced: boolean }> => {
-      try {
-          const dbUpdates: any = {};
-          if (updates.monthlyLimit !== undefined) dbUpdates.monthly_limit = updates.monthlyLimit;
-          if (updates.currency !== undefined) dbUpdates.currency = updates.currency;
-          if (updates.periodType !== undefined) dbUpdates.period_type = updates.periodType;
-          if (updates.periodStartDay !== undefined) dbUpdates.period_start_day = updates.periodStartDay;
-          
-          // 1. Save Local
-          const currentLocal = JSON.parse(localStorage.getItem('user_settings') || '{}');
-          const newLocal = { ...currentLocal, ...updates };
-          localStorage.setItem('user_settings', JSON.stringify(newLocal));
+    try {
+      const dbUpdates: any = {};
+      if (updates.monthlyLimit !== undefined) dbUpdates.monthly_limit = updates.monthlyLimit;
+      if (updates.currency !== undefined) dbUpdates.currency = updates.currency;
+      if (updates.periodType !== undefined) dbUpdates.period_type = updates.periodType;
+      if (updates.periodStartDay !== undefined) dbUpdates.period_start_day = updates.periodStartDay;
 
-          // 2. Sync DB
-          const { error } = await supabase
-            .from('profiles')
-            .upsert({
-                id: userId,
-                ...dbUpdates,
-                updated_at: new Date().toISOString()
-            }, { onConflict: 'id' });
-          
-          if (error) {
-              if (error.code === '42501') {
-                  return { success: true, synced: false };
-              }
-              throw error;
-          }
+      // 1. Save Local
+      const currentLocal = JSON.parse(localStorage.getItem('user_settings') || '{}');
+      const newLocal = { ...currentLocal, ...updates };
+      localStorage.setItem('user_settings', JSON.stringify(newLocal));
 
-          // 3. Verify
-          const { data: verifyData, error: verifyError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .single();
+      // 2. Sync DB
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: userId,
+          ...dbUpdates,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
 
-          if (verifyError || !verifyData) return { success: true, synced: false };
-
-          if (updates.monthlyLimit !== undefined && Number(verifyData.monthly_limit) !== Number(updates.monthlyLimit)) {
-              return { success: true, synced: false };
-          }
-
-          return { success: true, synced: true };
-
-      } catch (e: any) {
-          console.error("Error in updateUserProfile:", e);
+      if (error) {
+        if (error.code === '42501') {
           return { success: true, synced: false };
+        }
+        throw error;
       }
+
+      // 3. Verify
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (verifyError || !verifyData) return { success: true, synced: false };
+
+      if (updates.monthlyLimit !== undefined && Number(verifyData.monthly_limit) !== Number(updates.monthlyLimit)) {
+        return { success: true, synced: false };
+      }
+
+      return { success: true, synced: true };
+
+    } catch (e: any) {
+      console.error("Error in updateUserProfile:", e);
+      return { success: true, synced: false };
+    }
   },
 
   // --- PERIOD CALCULATOR ---
   calculatePeriodRange: (user: User): { start: Date, end: Date, label: string, daysLeft: number } => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-      const startDay = typeof user.periodStartDay === 'number' ? user.periodStartDay : parseInt(String(user.periodStartDay)) || 1;
-      let start = new Date(today);
-      let end = new Date(today);
-      let label = "";
+    const startDay = typeof user.periodStartDay === 'number' ? user.periodStartDay : parseInt(String(user.periodStartDay)) || 1;
+    let start = new Date(today);
+    let end = new Date(today);
+    let label = "";
 
-      const setSafeDate = (date: Date, year: number, month: number, day: number) => {
-        const maxDays = new Date(year, month + 1, 0).getDate();
-        date.setFullYear(year, month, Math.min(day, maxDays));
-        date.setHours(0, 0, 0, 0);
-      };
+    const setSafeDate = (date: Date, year: number, month: number, day: number) => {
+      const maxDays = new Date(year, month + 1, 0).getDate();
+      date.setFullYear(year, month, Math.min(day, maxDays));
+      date.setHours(0, 0, 0, 0);
+    };
 
-      if (user.periodType === 'Quincenal') {
-          if (today.getDate() <= 15) {
-              setSafeDate(start, today.getFullYear(), today.getMonth(), 1);
-              setSafeDate(end, today.getFullYear(), today.getMonth(), 15);
-              label = `1ª Quincena ${today.toLocaleDateString('es-MX', {month: 'long'})}`;
-          } else {
-              setSafeDate(start, today.getFullYear(), today.getMonth(), 16);
-              setSafeDate(end, today.getFullYear(), today.getMonth() + 1, 0);
-              label = `2ª Quincena ${today.toLocaleDateString('es-MX', {month: 'long'})}`;
-          }
-      } else if (user.periodType === 'Semanal') {
-          const currentDay = today.getDay() || 7; 
-          const diff = currentDay - 1;
-          start.setDate(today.getDate() - diff);
-          end = new Date(start);
-          end.setDate(start.getDate() + 6);
-          label = `Semana ${start.getDate()} - ${end.getDate()} ${today.toLocaleDateString('es-MX', {month: 'short'})}`;
-      } else if (user.periodType === 'Bimestral') {
-          const currentMonth = today.getMonth();
-          const startMonth = currentMonth % 2 === 0 ? currentMonth : currentMonth - 1;
-          setSafeDate(start, today.getFullYear(), startMonth, startDay);
-          end = new Date(start);
-          end.setMonth(end.getMonth() + 2);
-          end.setDate(end.getDate() - 1);
-          label = `Bimestre ${start.toLocaleDateString('es-MX', {month: 'short'})} - ${end.toLocaleDateString('es-MX', {month: 'short'})}`;
-      } else { 
-          // Mensual
-          let targetMonth = today.getMonth();
-          let targetYear = today.getFullYear();
+    if (user.periodType === 'Quincenal') {
+      if (today.getDate() <= 15) {
+        setSafeDate(start, today.getFullYear(), today.getMonth(), 1);
+        setSafeDate(end, today.getFullYear(), today.getMonth(), 15);
+        label = `1ª Quincena ${today.toLocaleDateString('es-MX', { month: 'long' })}`;
+      } else {
+        setSafeDate(start, today.getFullYear(), today.getMonth(), 16);
+        setSafeDate(end, today.getFullYear(), today.getMonth() + 1, 0);
+        label = `2ª Quincena ${today.toLocaleDateString('es-MX', { month: 'long' })}`;
+      }
+    } else if (user.periodType === 'Semanal') {
+      const currentDay = today.getDay() || 7;
+      const diff = currentDay - 1;
+      start.setDate(today.getDate() - diff);
+      end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      label = `Semana ${start.getDate()} - ${end.getDate()} ${today.toLocaleDateString('es-MX', { month: 'short' })}`;
+    } else if (user.periodType === 'Bimestral') {
+      const currentMonth = today.getMonth();
+      const startMonth = currentMonth % 2 === 0 ? currentMonth : currentMonth - 1;
+      setSafeDate(start, today.getFullYear(), startMonth, startDay);
+      end = new Date(start);
+      end.setMonth(end.getMonth() + 2);
+      end.setDate(end.getDate() - 1);
+      label = `Bimestre ${start.toLocaleDateString('es-MX', { month: 'short' })} - ${end.toLocaleDateString('es-MX', { month: 'short' })}`;
+    } else {
+      // Mensual
+      let targetMonth = today.getMonth();
+      let targetYear = today.getFullYear();
 
-          if (today.getDate() < startDay) {
-              targetMonth = targetMonth - 1;
-              if (targetMonth < 0) {
-                  targetMonth = 11;
-                  targetYear--;
-              }
-          }
-
-          setSafeDate(start, targetYear, targetMonth, startDay);
-          end = new Date(start);
-          end.setMonth(end.getMonth() + 1);
-          end.setDate(end.getDate() - 1);
-
-          label = `${start.toLocaleDateString('es-MX', {day: 'numeric', month: 'short'})} - ${end.toLocaleDateString('es-MX', {day: 'numeric', month: 'short'})}`;
+      if (today.getDate() < startDay) {
+        targetMonth = targetMonth - 1;
+        if (targetMonth < 0) {
+          targetMonth = 11;
+          targetYear--;
+        }
       }
 
-      end.setHours(23, 59, 59, 999);
-      const now = new Date();
-      const diffTime = end.getTime() - now.getTime();
-      const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+      setSafeDate(start, targetYear, targetMonth, startDay);
+      end = new Date(start);
+      end.setMonth(end.getMonth() + 1);
+      end.setDate(end.getDate() - 1);
 
-      return { start, end, label, daysLeft: Math.max(0, daysLeft) };
+      label = `${start.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`;
+    }
+
+    end.setHours(23, 59, 59, 999);
+    const now = new Date();
+    const diffTime = end.getTime() - now.getTime();
+    const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    return { start, end, label, daysLeft: Math.max(0, daysLeft) };
   },
 
   isDateInPeriod: (expenseDateIso: string, start: Date, end: Date): boolean => {
-      const txDate = new Date(expenseDateIso);
-      const tx = new Date(txDate); tx.setHours(0, 0, 0, 0);
-      const s = new Date(start); s.setHours(0, 0, 0, 0);
-      const e = new Date(end); e.setHours(23, 59, 59, 999);
-      return tx.getTime() >= s.getTime() && tx.getTime() <= e.getTime();
+    const txDate = new Date(expenseDateIso);
+    const tx = new Date(txDate); tx.setHours(0, 0, 0, 0);
+    const s = new Date(start); s.setHours(0, 0, 0, 0);
+    const e = new Date(end); e.setHours(23, 59, 59, 999);
+    return tx.getTime() >= s.getTime() && tx.getTime() <= e.getTime();
   },
 
   moveSurplusToSavings: async (amount: number, fromAccountId: string, toGoalId?: string, toAccountId?: string) => {
-      await dbService.updateBalance(fromAccountId, amount, 'subtract');
-      const date = new Date().toISOString();
+    await dbService.updateBalance(fromAccountId, amount, 'subtract');
+    const date = new Date().toISOString();
 
-      if (toGoalId) {
-          const { data: goal } = await supabase.from('goals').select('*').eq('id', toGoalId).single();
-          if (goal) {
-              await supabase.from('goals').update({ current_amount: goal.current_amount + amount }).eq('id', toGoalId);
-              await dbService.addExpense({
-                  amount: amount,
-                  category: 'Ahorro', // Fixed: passed as property of object
-                  description: `Ahorro inteligente: ${goal.name}`,
-                  date: date,
-                  isFixed: false
-              }, fromAccountId);
-          }
-      } else if (toAccountId) {
-          await dbService.updateBalance(toAccountId, amount, 'add');
-           await dbService.transferFunds(amount, fromAccountId, toAccountId, date);
+    if (toGoalId) {
+      const { data: goal } = await supabase.from('goals').select('*').eq('id', toGoalId).single();
+      if (goal) {
+        await supabase.from('goals').update({ current_amount: goal.current_amount + amount }).eq('id', toGoalId);
+        await dbService.addExpense({
+          amount: amount,
+          category: 'Ahorro', // Fixed: passed as property of object
+          description: `Ahorro inteligente: ${goal.name}`,
+          date: date,
+          isFixed: false
+        }, fromAccountId);
       }
+    } else if (toAccountId) {
+      await dbService.updateBalance(toAccountId, amount, 'add');
+      await dbService.transferFunds(amount, fromAccountId, toAccountId, date);
+    }
   },
 
   getCategories: async () => {
@@ -253,35 +254,35 @@ export const dbService = {
   },
 
   updateCategory: async (id: string, updates: { color?: string, name?: string }) => {
-     try {
-         const { error } = await supabase.from('categories').update(updates).eq('id', id);
-         if (error) throw error;
-     } catch (error) { throw error; }
+    try {
+      const { error } = await supabase.from('categories').update(updates).eq('id', id);
+      if (error) throw error;
+    } catch (error) { throw error; }
   },
-  
-  ensureCategoryExists: async (name: string, color: string) => {
-      try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
-          const { data: existing } = await supabase
-            .from('categories')
-            .select('*')
-            .eq('name', name)
-            .or(`user_id.is.null,user_id.eq.${user.id}`) 
-            .maybeSingle();
 
-          if (existing) {
-              if (existing.user_id === user.id) {
-                  await dbService.updateCategory(existing.id, { color });
-              } else {
-                   const { data: shadow } = await supabase.from('categories').select('*').eq('name', name).eq('user_id', user.id).maybeSingle();
-                   if(shadow) await dbService.updateCategory(shadow.id, { color });
-                   else await dbService.createCategory(name, color);
-              }
-          } else {
-              await dbService.createCategory(name, color);
-          }
-      } catch (e) { console.error("Error ensuring category", e); }
+  ensureCategoryExists: async (name: string, color: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: existing } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('name', name)
+        .or(`user_id.is.null,user_id.eq.${user.id}`)
+        .maybeSingle();
+
+      if (existing) {
+        if (existing.user_id === user.id) {
+          await dbService.updateCategory(existing.id, { color });
+        } else {
+          const { data: shadow } = await supabase.from('categories').select('*').eq('name', name).eq('user_id', user.id).maybeSingle();
+          if (shadow) await dbService.updateCategory(shadow.id, { color });
+          else await dbService.createCategory(name, color);
+        }
+      } else {
+        await dbService.createCategory(name, color);
+      }
+    } catch (e) { console.error("Error ensuring category", e); }
   },
 
   deleteCategory: async (id: string) => {
@@ -304,27 +305,27 @@ export const dbService = {
 
   executeAIQuery: async (filters: { startDate?: string, endDate?: string, category?: string }) => {
     try {
-        let query = supabase
-            .from('expenses')
-            .select('date, amount, category_name, description')
-            .order('date', { ascending: true });
+      let query = supabase
+        .from('expenses')
+        .select('date, amount, category_name, description')
+        .order('date', { ascending: true });
 
-        if (filters.startDate) {
-            query = query.gte('date', filters.startDate);
-        }
-        if (filters.endDate) {
-            query = query.lte('date', filters.endDate);
-        }
-        if (filters.category) {
-            query = query.ilike('category_name', `%${filters.category}%`);
-        }
+      if (filters.startDate) {
+        query = query.gte('date', filters.startDate);
+      }
+      if (filters.endDate) {
+        query = query.lte('date', filters.endDate);
+      }
+      if (filters.category) {
+        query = query.ilike('category_name', `%${filters.category}%`);
+      }
 
-        const { data, error } = await query;
-        if (error) throw error;
-        return data || [];
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
     } catch (e) {
-        console.error("AI Query Error", e);
-        return [];
+      console.error("AI Query Error", e);
+      return [];
     }
   },
 
@@ -340,7 +341,7 @@ export const dbService = {
         description: expense.description,
         category_name: expense.category, // Correct mapping
         date: expense.date,
-        account_id: accountId, 
+        account_id: accountId,
         is_fixed: expense.isFixed || false
       });
 
@@ -355,7 +356,7 @@ export const dbService = {
       const user = userResponse.data.user;
       if (!user) throw new Error('No authenticated user');
 
-      const dbAmount = -Math.abs(income.amount || 0); 
+      const dbAmount = -Math.abs(income.amount || 0);
       const { error } = await supabase.from('expenses').insert({
         user_id: user.id,
         amount: dbAmount,
@@ -372,26 +373,26 @@ export const dbService = {
   },
 
   transferFunds: async (amount: number, fromAccountId: string, toAccountId: string, date: string) => {
-     try {
-        const userResponse = await supabase.auth.getUser();
-        const user = userResponse.data.user;
-        if (!user) throw new Error('No authenticated user');
+    try {
+      const userResponse = await supabase.auth.getUser();
+      const user = userResponse.data.user;
+      if (!user) throw new Error('No authenticated user');
 
-        await dbService.updateBalance(fromAccountId, amount, 'subtract');
-        await dbService.updateBalance(toAccountId, amount, 'add');
+      await dbService.updateBalance(fromAccountId, amount, 'subtract');
+      await dbService.updateBalance(toAccountId, amount, 'add');
 
-        const { data: fromAcc } = await supabase.from('accounts').select('name').eq('id', fromAccountId).single();
-        const { data: toAcc } = await supabase.from('accounts').select('name').eq('id', toAccountId).single();
+      const { data: fromAcc } = await supabase.from('accounts').select('name').eq('id', fromAccountId).single();
+      const { data: toAcc } = await supabase.from('accounts').select('name').eq('id', toAccountId).single();
 
-        await supabase.from('expenses').insert({
-          user_id: user.id,
-          amount: 0, 
-          description: `Transferencia: $${amount} de ${fromAcc?.name} a ${toAcc?.name}`,
-          category_name: 'Transferencia',
-          date: date,
-          is_fixed: false
-        });
-     } catch (error) { throw error; }
+      await supabase.from('expenses').insert({
+        user_id: user.id,
+        amount: 0,
+        description: `Transferencia: $${amount} de ${fromAcc?.name} a ${toAcc?.name}`,
+        category_name: 'Transferencia',
+        date: date,
+        is_fixed: false
+      });
+    } catch (error) { throw error; }
   },
 
   updateExpense: async (id: string, expense: Partial<AppExpense>) => {
@@ -428,7 +429,7 @@ export const dbService = {
       const userResponse = await supabase.auth.getUser();
       const user = userResponse.data.user;
       if (!user) throw new Error('No authenticated user');
-      
+
       const { data, error } = await supabase.from('accounts').insert({
         user_id: user.id,
         name: account.name,
@@ -440,18 +441,18 @@ export const dbService = {
       }).select().single();
 
       if (error) {
-           if (error.message?.includes('invalid input value for enum') || error.code === '22P02') {
-               throw new Error("⚠️ ERROR DE BASE DE DATOS: Necesitas actualizar los tipos de cuenta en Supabase. Ejecuta: ALTER TYPE account_type ADD VALUE 'Loan';");
-           }
-           throw error;
+        if (error.message?.includes('invalid input value for enum') || error.code === '22P02') {
+          throw new Error("⚠️ ERROR DE BASE DE DATOS: Necesitas actualizar los tipos de cuenta en Supabase. Ejecuta: ALTER TYPE account_type ADD VALUE 'Loan';");
+        }
+        throw error;
       }
       return data ? mapAccount(data) : null;
-    } catch (error: any) { 
-        console.error("Error adding account:", error);
-        if (error.message && error.message.includes("ALTER TYPE")) {
-            throw error;
-        }
-        return null; 
+    } catch (error: any) {
+      console.error("Error adding account:", error);
+      if (error.message && error.message.includes("ALTER TYPE")) {
+        throw error;
+      }
+      return null;
     }
   },
 
@@ -460,7 +461,7 @@ export const dbService = {
       const updateData: any = {
         name: account.name,
         type: account.type,
-        balance: account.balance, 
+        balance: account.balance,
         color: account.color,
         credit_limit: account.limit || null,
         last_digits: account.lastDigits || null
@@ -471,40 +472,54 @@ export const dbService = {
     } catch (error) { throw error; }
   },
 
+  setDefaultAccount: async (accountId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No authenticated user');
+
+      // 1. Reset all to false
+      await supabase.from('accounts').update({ is_default: false }).eq('user_id', user.id);
+
+      // 2. Set target to true
+      const { error } = await supabase.from('accounts').update({ is_default: true }).eq('id', accountId);
+      if (error) throw error;
+    } catch (error) { throw error; }
+  },
+
   calibrateAccount: async (accountId: string, newBalance: number, recordTransaction: boolean) => {
     try {
-        const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
-        if (!acc) throw new Error("Cuenta no encontrada");
+      const { data: acc } = await supabase.from('accounts').select('*').eq('id', accountId).single();
+      if (!acc) throw new Error("Cuenta no encontrada");
 
-        const oldBalance = Number(acc.balance);
-        let diff = 0;
-        let isExpense = false; 
+      const oldBalance = Number(acc.balance);
+      let diff = 0;
+      let isExpense = false;
 
-        if (acc.type === 'Credit' || acc.type === 'Loan') {
-            diff = newBalance - oldBalance; 
-            isExpense = diff > 0;
-        } else {
-            diff = oldBalance - newBalance;
-            isExpense = diff > 0; 
+      if (acc.type === 'Credit' || acc.type === 'Loan') {
+        diff = newBalance - oldBalance;
+        isExpense = diff > 0;
+      } else {
+        diff = oldBalance - newBalance;
+        isExpense = diff > 0;
+      }
+
+      await supabase.from('accounts').update({ balance: newBalance }).eq('id', accountId);
+
+      if (recordTransaction && Math.abs(diff) > 0.01) {
+        const userResponse = await supabase.auth.getUser();
+        const user = userResponse.data.user;
+        if (user) {
+          await supabase.from('expenses').insert({
+            user_id: user.id,
+            amount: isExpense ? Math.abs(diff) : -Math.abs(diff),
+            description: isExpense ? 'Ajuste (Faltante/Gasto/Más Deuda)' : 'Ajuste (Sobrante/Ingreso/Menos Deuda)',
+            category_name: 'Ajuste de Saldo',
+            date: new Date().toISOString(),
+            account_id: accountId,
+            is_fixed: false
+          });
         }
-
-        await supabase.from('accounts').update({ balance: newBalance }).eq('id', accountId);
-
-        if (recordTransaction && Math.abs(diff) > 0.01) {
-            const userResponse = await supabase.auth.getUser();
-            const user = userResponse.data.user;
-            if (user) {
-                await supabase.from('expenses').insert({
-                    user_id: user.id,
-                    amount: isExpense ? Math.abs(diff) : -Math.abs(diff),
-                    description: isExpense ? 'Ajuste (Faltante/Gasto/Más Deuda)' : 'Ajuste (Sobrante/Ingreso/Menos Deuda)',
-                    category_name: 'Ajuste de Saldo',
-                    date: new Date().toISOString(),
-                    account_id: accountId,
-                    is_fixed: false
-                });
-            }
-        }
+      }
     } catch (error) { throw error; }
   },
 
@@ -517,20 +532,20 @@ export const dbService = {
   },
 
   updateBalance: async (accountId: string, amount: number, operation: 'add' | 'subtract') => {
-      try {
-        const { data: acc } = await supabase.from('accounts').select('balance, type').eq('id', accountId).single();
-        if (!acc) return;
+    try {
+      const { data: acc } = await supabase.from('accounts').select('balance, type').eq('id', accountId).single();
+      if (!acc) return;
 
-        let newBalance = Number(acc.balance);
-        if (acc.type === 'Credit' || acc.type === 'Loan') {
-            if (operation === 'subtract') newBalance += amount;
-            else newBalance -= amount;
-        } else {
-            if (operation === 'subtract') newBalance -= amount; 
-            else newBalance += amount;
-        }
-        await supabase.from('accounts').update({ balance: newBalance }).eq('id', accountId);
-      } catch (error) { console.error("DB Error (updateBalance):", error); }
+      let newBalance = Number(acc.balance);
+      if (acc.type === 'Credit' || acc.type === 'Loan') {
+        if (operation === 'subtract') newBalance += amount;
+        else newBalance -= amount;
+      } else {
+        if (operation === 'subtract') newBalance -= amount;
+        else newBalance += amount;
+      }
+      await supabase.from('accounts').update({ balance: newBalance }).eq('id', accountId);
+    } catch (error) { console.error("DB Error (updateBalance):", error); }
   },
 
   getGoals: async () => {
@@ -546,7 +561,7 @@ export const dbService = {
       const userResponse = await supabase.auth.getUser();
       const user = userResponse.data.user;
       if (!user) throw new Error('No authenticated user');
-      
+
       const { error } = await supabase.from('goals').insert({
         user_id: user.id,
         name: goal.name,
@@ -576,33 +591,33 @@ export const dbService = {
   },
 
   contributeToGoal: async (goalId: string, amount: number, fromAccountId: string) => {
-      try {
-          const userResponse = await supabase.auth.getUser();
-          const user = userResponse.data.user;
-          if (!user) throw new Error('No authenticated user');
+    try {
+      const userResponse = await supabase.auth.getUser();
+      const user = userResponse.data.user;
+      if (!user) throw new Error('No authenticated user');
 
-          const { data: goal } = await supabase.from('goals').select('*').eq('id', goalId).single();
-          if (!goal) throw new Error("Meta no encontrada");
+      const { data: goal } = await supabase.from('goals').select('*').eq('id', goalId).single();
+      if (!goal) throw new Error("Meta no encontrada");
 
-          await dbService.updateBalance(fromAccountId, amount, 'subtract');
+      await dbService.updateBalance(fromAccountId, amount, 'subtract');
 
-          const newAmount = Number(goal.current_amount) + amount;
-          await supabase.from('goals').update({ current_amount: newAmount }).eq('id', goalId);
+      const newAmount = Number(goal.current_amount) + amount;
+      await supabase.from('goals').update({ current_amount: newAmount }).eq('id', goalId);
 
-          await supabase.from('expenses').insert({
-              user_id: user.id,
-              amount: amount,
-              description: `Abono a meta: ${goal.name}`,
-              category_name: 'Ahorro',
-              date: new Date().toISOString(),
-              account_id: fromAccountId,
-              is_fixed: false
-          });
+      await supabase.from('expenses').insert({
+        user_id: user.id,
+        amount: amount,
+        description: `Abono a meta: ${goal.name}`,
+        category_name: 'Ahorro',
+        date: new Date().toISOString(),
+        account_id: fromAccountId,
+        is_fixed: false
+      });
 
-      } catch (error) {
-          console.error("Error contributing to goal", error);
-          throw error;
-      }
+    } catch (error) {
+      console.error("Error contributing to goal", error);
+      throw error;
+    }
   },
 
   deleteGoal: async (id: string) => {
@@ -613,33 +628,33 @@ export const dbService = {
   },
 
   getBudgets: async () => {
-      try {
-        const { data, error } = await supabase.from('budgets').select('*');
-        if (error) throw error;
-        const [categories] = await Promise.all([ dbService.getCategories() ]);
-        return data ? data.map((b: any) => {
-            const catInfo = categories.find(c => c.name === b.category_name);
-            return {
-                category: b.category_name,
-                limit: b.limit_amount,
-                spent: 0, 
-                color: catInfo?.color || '#A88BEB'
-            };
-        }) : [];
-      } catch (error) { return []; }
+    try {
+      const { data, error } = await supabase.from('budgets').select('*');
+      if (error) throw error;
+      const [categories] = await Promise.all([dbService.getCategories()]);
+      return data ? data.map((b: any) => {
+        const catInfo = categories.find(c => c.name === b.category_name);
+        return {
+          category: b.category_name,
+          limit: b.limit_amount,
+          spent: 0,
+          color: catInfo?.color || '#A88BEB'
+        };
+      }) : [];
+    } catch (error) { return []; }
   },
-  
+
   addBudget: async (category: string, limit: number, color?: string) => {
     try {
       const userResponse = await supabase.auth.getUser();
       const user = userResponse.data.user;
       if (!user) throw new Error('No authenticated user');
       const { error } = await supabase.from('budgets').insert({
-          user_id: user.id,
-          category_name: category,
-          limit_amount: limit,
-          period_month: new Date().getMonth() + 1, 
-          period_year: new Date().getFullYear()
+        user_id: user.id,
+        category_name: category,
+        limit_amount: limit,
+        period_month: new Date().getMonth() + 1,
+        period_year: new Date().getFullYear()
       });
       if (error) throw error;
       if (color) await dbService.ensureCategoryExists(category, color);
@@ -661,7 +676,7 @@ export const dbService = {
   },
 
   deleteBudget: async (category: string) => {
-     try {
+    try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No authenticated user');
       const { error } = await supabase
@@ -674,45 +689,45 @@ export const dbService = {
   },
 
   getRecurringExpenses: async () => {
-      try {
-          const { data, error } = await supabase.from('recurring_expenses').select('*').order('next_date', { ascending: true });
-          if (error) {
-              return [];
-          }
-          return data ? data.map(mapRecurring) : [];
-      } catch (error) { return []; }
+    try {
+      const { data, error } = await supabase.from('recurring_expenses').select('*').order('next_date', { ascending: true });
+      if (error) {
+        return [];
+      }
+      return data ? data.map(mapRecurring) : [];
+    } catch (error) { return []; }
   },
 
   addRecurringExpense: async (item: RecurringItem) => {
-      try {
-          const userResponse = await supabase.auth.getUser();
-          const user = userResponse.data.user;
-          if (!user) throw new Error('No authenticated user');
+    try {
+      const userResponse = await supabase.auth.getUser();
+      const user = userResponse.data.user;
+      if (!user) throw new Error('No authenticated user');
 
-          const { error } = await supabase.from('recurring_expenses').insert({
-              user_id: user.id,
-              name: item.name,
-              amount: item.amount,
-              category_name: item.category,
-              frequency: item.frequency,
-              next_date: item.nextDate,
-              is_variable: item.isVariable
-          });
-          if (error) throw error;
-      } catch (error) { throw error; }
+      const { error } = await supabase.from('recurring_expenses').insert({
+        user_id: user.id,
+        name: item.name,
+        amount: item.amount,
+        category_name: item.category,
+        frequency: item.frequency,
+        next_date: item.nextDate,
+        is_variable: item.isVariable
+      });
+      if (error) throw error;
+    } catch (error) { throw error; }
   },
 
   updateRecurringExpenseDate: async (id: string, nextDate: string) => {
-      try {
-          const { error } = await supabase.from('recurring_expenses').update({ next_date: nextDate }).eq('id', id);
-          if (error) throw error;
-      } catch (error) { throw error; }
+    try {
+      const { error } = await supabase.from('recurring_expenses').update({ next_date: nextDate }).eq('id', id);
+      if (error) throw error;
+    } catch (error) { throw error; }
   },
 
   deleteRecurringExpense: async (id: string) => {
-      try {
-          const { error } = await supabase.from('recurring_expenses').delete().eq('id', id);
-          if (error) throw error;
-      } catch (error) { throw error; }
+    try {
+      const { error } = await supabase.from('recurring_expenses').delete().eq('id', id);
+      if (error) throw error;
+    } catch (error) { throw error; }
   }
 };
