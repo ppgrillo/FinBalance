@@ -45,9 +45,11 @@ export default function App() {
   const [initializing, setInitializing] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const refreshUser = async () => {
+  const refreshUser = async (session: any = null) => {
     try {
-      const currentUser = await authService.getUser();
+      console.log("App: refreshUser called", session ? "with session" : "without session");
+      const currentUser = await authService.getUser(session);
+      console.log("App: getUser result:", currentUser);
       setUser(currentUser);
     } catch (e) {
       console.error("Failed to refresh user", e);
@@ -58,7 +60,9 @@ export default function App() {
   useEffect(() => {
     // Check active session
     const checkSession = async () => {
+      console.log("App: checkSession starting...");
       await refreshUser();
+      console.log("App: checkSession done, setting initializing false");
       setInitializing(false);
     };
 
@@ -77,8 +81,9 @@ export default function App() {
 
     // Listen for Auth Changes (Login, Logout, Token Refresh)
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("App: Auth Event:", event, session?.user?.id);
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        await refreshUser();
+        await refreshUser(session);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
       }
