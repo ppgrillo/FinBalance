@@ -185,6 +185,28 @@ export const Onboarding: React.FC<Props> = ({ onLogin }) => {
             {loading && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
             {mode === 'login' ? 'Iniciar Sesión' : 'Registrarse'}
           </button>
+
+          <div className="relative flex items-center justify-center my-6">
+            <div className="border-t border-gray-200 w-full absolute"></div>
+            <span className="bg-white px-3 text-xs text-textSecondary font-medium relative z-10 uppercase tracking-wider">O continúa con</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              setLoading(true);
+              const { error } = await authService.signInWithGoogle();
+              if (error) {
+                console.error(error);
+                setErrorMsg("Error al conectar con Google");
+                setLoading(false);
+              }
+            }}
+            className="w-full bg-white border border-gray-200 text-textPrimary font-semibold py-3.5 rounded-xl hover:bg-gray-50 transition-all flex justify-center items-center gap-3"
+          >
+            <Icons.Google />
+            <span>Google</span>
+          </button>
         </form>
 
         <div className="text-center mt-8">
