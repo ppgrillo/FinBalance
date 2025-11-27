@@ -7,7 +7,7 @@ import { dbService } from "./dbService";
 // La API Key se obtiene de process.env.API_KEY
 // ------------------------------------------------------------------
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 // Definition of the tool available to Gemini
 const queryExpensesTool: FunctionDeclaration = {
@@ -95,7 +95,7 @@ export const geminiService = {
             if (call.name === "query_expenses") {
               const args = call.args as any;
               console.log("🤖 AI requesting DB query:", args);
-              
+
               // Execute DB Query
               const data = await dbService.executeAIQuery({
                 startDate: args.startDate,
@@ -166,15 +166,15 @@ export const geminiService = {
         model,
         contents: prompt,
         config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    planText: { type: Type.STRING, description: "Markdown text with the 3 step plan" },
-                    monthlyContribution: { type: Type.NUMBER, description: "The calculated monthly savings amount required" }
-                },
-                required: ["planText", "monthlyContribution"]
-            }
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              planText: { type: Type.STRING, description: "Markdown text with the 3 step plan" },
+              monthlyContribution: { type: Type.NUMBER, description: "The calculated monthly savings amount required" }
+            },
+            required: ["planText", "monthlyContribution"]
+          }
         }
       });
 
@@ -190,10 +190,10 @@ export const geminiService = {
       const diffTime = Math.abs(end.getTime() - today.getTime());
       const months = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30));
       const calc = months > 0 ? Math.ceil(amount / months) : amount;
-      
+
       return {
-          planText: "No se pudo generar el plan con IA. Se ha calculado un ahorro mensual estimado.",
-          monthlyContribution: calc
+        planText: "No se pudo generar el plan con IA. Se ha calculado un ahorro mensual estimado.",
+        monthlyContribution: calc
       };
     }
   },
@@ -202,17 +202,17 @@ export const geminiService = {
    * Analyze text or image to extract expense details
    */
   analyzeExpense: async (
-    textInput?: string, 
+    textInput?: string,
     imageBase64?: string
   ): Promise<Partial<Expense>> => {
     try {
       const model = "gemini-2.5-flash";
-      
+
       const parts: any[] = [];
       if (imageBase64) {
         parts.push({
           inlineData: {
-            mimeType: 'image/jpeg', 
+            mimeType: 'image/jpeg',
             data: imageBase64
           }
         });
@@ -241,7 +241,7 @@ export const geminiService = {
 
       const jsonText = response.text;
       if (!jsonText) throw new Error("Empty response");
-      
+
       const data = JSON.parse(jsonText);
       return {
         amount: data.amount,

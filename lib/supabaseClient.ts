@@ -7,8 +7,8 @@ import { createClient } from '@supabase/supabase-js';
 // Si no tienes cuenta, la app funcionará en modo "demo" (sin guardar datos).
 // ------------------------------------------------------------------
 
-const PROJECT_URL = "https://vyoxfhbgqityitcaeccs.supabase.co";
-const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5b3hmaGJncWl0eWl0Y2FlY2NzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3NjY5ODgsImV4cCI6MjA3OTM0Mjk4OH0.pN9SsM2YjAK1eAehTtQ2DzXxl6_AC1-xVmz4fG9KNk0";
+const PROJECT_URL = import.meta.env.VITE_SUPABASE_URL || "https://vyoxfhbgqityitcaeccs.supabase.co";
+const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5b3hmaGJncWl0eWl0Y2FlY2NzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3NjY5ODgsImV4cCI6MjA3OTM0Mjk4OH0.pN9SsM2YjAK1eAehTtQ2DzXxl6_AC1-xVmz4fG9KNk0";
 
 // ------------------------------------------------------------------
 
