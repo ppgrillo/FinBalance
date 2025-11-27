@@ -35,9 +35,11 @@ export const AddExpense: React.FC = () => {
 
     // Voice State
     const [isRecording, setIsRecording] = useState(false);
+    const [showCameraOptions, setShowCameraOptions] = useState(false);
     const recognitionRef = useRef<any>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const loadData = async () => {
@@ -352,12 +354,14 @@ export const AddExpense: React.FC = () => {
                             {/* Camera Button */}
                             <button
                                 type="button"
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={() => setShowCameraOptions(true)}
                                 className="bg-white border border-purple-200 text-purple-600 w-12 rounded-xl flex items-center justify-center hover:bg-purple-50 transition-colors"
                                 title="Usar Cámara"
                             >
                                 <Icons.Camera size={20} />
                             </button>
+
+                            {/* Hidden Inputs */}
                             <input
                                 type="file"
                                 accept="image/*"
@@ -365,10 +369,58 @@ export const AddExpense: React.FC = () => {
                                 className="hidden"
                                 onChange={handleFileUpload}
                             />
+                            <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                ref={cameraInputRef}
+                                className="hidden"
+                                onChange={handleFileUpload}
+                            />
                         </div>
                         <p className="text-[10px] text-purple-400 mt-2 ml-1">
                             Escribe, habla o sube foto. Ej: "Cena 500", "Uber 200".
                         </p>
+                    </div>
+                )}
+
+                {/* Camera Options Modal */}
+                {showCameraOptions && (
+                    <div className="absolute inset-0 z-20 bg-white/95 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center animate-fade-in p-6">
+                        <h3 className="text-xl font-bold text-gray-800 mb-6">¿Qué deseas hacer?</h3>
+                        <div className="grid grid-cols-2 gap-4 w-full max-w-xs mb-6">
+                            <button
+                                onClick={() => {
+                                    setShowCameraOptions(false);
+                                    cameraInputRef.current?.click();
+                                }}
+                                className="flex flex-col items-center justify-center gap-3 bg-purple-50 border-2 border-purple-100 p-6 rounded-2xl hover:bg-purple-100 hover:border-purple-300 transition-all"
+                            >
+                                <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center text-white shadow-lg">
+                                    <Icons.Camera size={24} />
+                                </div>
+                                <span className="font-bold text-purple-700 text-sm">Tomar Foto</span>
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    setShowCameraOptions(false);
+                                    fileInputRef.current?.click();
+                                }}
+                                className="flex flex-col items-center justify-center gap-3 bg-blue-50 border-2 border-blue-100 p-6 rounded-2xl hover:bg-blue-100 hover:border-blue-300 transition-all"
+                            >
+                                <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white shadow-lg">
+                                    <Icons.Image size={24} />
+                                </div>
+                                <span className="font-bold text-blue-700 text-sm">Galería</span>
+                            </button>
+                        </div>
+                        <button
+                            onClick={() => setShowCameraOptions(false)}
+                            className="text-gray-400 font-medium text-sm hover:text-gray-600"
+                        >
+                            Cancelar
+                        </button>
                     </div>
                 )}
 
