@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Icons } from '../components/Icons';
-import { CategoryType, Account } from '../types';
+import { CategoryType, Account, IncomeCategoryType } from '../types';
 import { geminiService } from '../services/geminiService';
 import { dbService } from '../services/dbService';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -32,6 +32,7 @@ export const AddExpense: React.FC = () => {
 
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+    const [availableIncomeCategories, setAvailableIncomeCategories] = useState<string[]>(Object.values(IncomeCategoryType));
 
     // Voice State
     const [isRecording, setIsRecording] = useState(false);
@@ -51,13 +52,20 @@ export const AddExpense: React.FC = () => {
                 setAccounts(accData);
 
                 // Load categories from DB
-                let catNames: string[] = [];
+                let expenseCats: string[] = [];
+                let incomeCats: string[] = [];
+
                 if (catData && catData.length > 0) {
-                    catNames = catData.map(c => c.name);
-                } else {
-                    catNames = Object.values(CategoryType);
+                    expenseCats = catData.filter(c => c.type === 'expense' || !c.type).map(c => c.name);
+                    incomeCats = catData.filter(c => c.type === 'income').map(c => c.name);
                 }
-                setAvailableCategories(catNames);
+
+                // Fallback if empty
+                if (expenseCats.length === 0) expenseCats = Object.values(CategoryType);
+                if (incomeCats.length === 0) incomeCats = Object.values(IncomeCategoryType);
+
+                setAvailableCategories(expenseCats);
+                setAvailableIncomeCategories(incomeCats);
 
                 // Set default category selection
                 if (catNames.length > 0) {
@@ -181,7 +189,7 @@ export const AddExpense: React.FC = () => {
         try {
             if (transactionType !== 'transfer' && category) {
                 if ((suggestedCategory === category && !availableCategories.includes(category)) || (isCustomCategory && !availableCategories.includes(category))) {
-                    await dbService.createCategory(category);
+                    await dbService.createCategory(category, transactionType === 'income' ? 'income' : 'expense');
                 }
             }
 
@@ -233,11 +241,26 @@ export const AddExpense: React.FC = () => {
     const handleAnalyze = async (text?: string, base64Img?: string) => {
         setLoading(true);
         try {
-            const result = await geminiService.analyzeExpense(text, base64Img, availableCategories);
+            const result = await geminiService.analyzeExpense(
+                text,
+                base64Img,
+                availableCategories,
+                availableIncomeCategories,
+                accounts.map(a => a.name)
+            );
+
             if (result.amount) setAmount(result.amount.toString());
 
+            // Handle Type Switching
+            if (result.type) {
+                setTransactionType(result.type);
+            }
+
+            // Handle Category
             if (result.category) {
-                const match = availableCategories.find(c => c.toLowerCase() === result.category?.toLowerCase());
+                const targetList = result.type === 'income' ? availableIncomeCategories : availableCategories;
+                const match = targetList.find(c => c.toLowerCase() === result.category?.toLowerCase());
+
                 if (match) {
                     setCategory(match);
                     setSuggestedCategory(null);
@@ -249,8 +272,20 @@ export const AddExpense: React.FC = () => {
                 }
             }
 
+            // Handle Account (Source or Destination)
+            if (result.destinationAccount) {
+                // Fuzzy match account name
+                const accMatch = accounts.find(a =>
+                    a.name.toLowerCase().includes(result.destinationAccount!.toLowerCase()) ||
+                    result.destinationAccount!.toLowerCase().includes(a.name.toLowerCase())
+                );
+                if (accMatch) {
+                    setSelectedAccount(accMatch.id);
+                }
+            }
+
             if (result.description) setDescription(result.description);
-            setTransactionType('expense');
+
         } catch (e) {
             alert("No se pudo analizar.");
         } finally {
@@ -309,80 +344,99 @@ export const AddExpense: React.FC = () => {
                 )}
 
                 {/* --- UNIFIED QUICK INPUT (Text + Voice + Camera) --- */}
-                {transactionType === 'expense' && (
-                    <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100 mb-6">
-                        <div className="flex items-center gap-2 mb-3 text-primary font-bold text-sm">
-                            <Icons.Brain size={18} />
-                            <span>Registro Rápido con IA</span>
-                        </div>
-
-                        <div className="flex gap-2">
-                            <div className="flex-1 relative">
-                                <input
-                                    type="text"
-                                    placeholder="Ej: Tacos 200"
-                                    className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/50 pr-10"
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            const val = (e.target as HTMLInputElement).value;
-                                            if (val.trim()) handleAnalyze(val);
-                                        }
-                                    }}
-                                />
-                                <button
-                                    onClick={(e) => {
-                                        const input = (e.currentTarget.previousElementSibling as HTMLInputElement).value;
-                                        if (input.trim()) handleAnalyze(input);
-                                    }}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200"
-                                >
-                                    <Icons.ArrowUpRight size={16} />
-                                </button>
-                            </div>
-
-                            {/* Voice Button */}
-                            <button
-                                type="button"
-                                onClick={startListening}
-                                className="bg-white border border-purple-200 text-purple-600 w-12 rounded-xl flex items-center justify-center hover:bg-purple-50 transition-colors"
-                                title="Usar Voz"
-                            >
-                                <Icons.Mic size={20} />
-                            </button>
-
-                            {/* Camera Button */}
-                            <button
-                                type="button"
-                                onClick={() => setShowCameraOptions(true)}
-                                className="bg-white border border-purple-200 text-purple-600 w-12 rounded-xl flex items-center justify-center hover:bg-purple-50 transition-colors"
-                                title="Usar Cámara"
-                            >
-                                <Icons.Camera size={20} />
-                            </button>
-
-                            {/* Hidden Inputs */}
-                            <input
-                                type="file"
-                                accept="image/*"
-                                ref={fileInputRef}
-                                className="hidden"
-                                onChange={handleFileUpload}
-                            />
-                            <input
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                ref={cameraInputRef}
-                                className="hidden"
-                                onChange={handleFileUpload}
-                            />
-                        </div>
-                        <p className="text-[10px] text-purple-400 mt-2 ml-1">
-                            Escribe, habla o sube foto. Ej: "Cena 500", "Uber 200".
-                        </p>
+                <div className={`p-4 rounded-2xl border mb-6 transition-colors ${transactionType === 'income' ? 'bg-green-50 border-green-100' :
+                    transactionType === 'transfer' ? 'bg-blue-50 border-blue-100' :
+                        'bg-purple-50 border-purple-100'
+                    }`}>
+                    <div className={`flex items-center gap-2 mb-3 font-bold text-sm ${transactionType === 'income' ? 'text-green-600' :
+                        transactionType === 'transfer' ? 'text-blue-600' :
+                            'text-purple-600'
+                        }`}>
+                        <Icons.Brain size={18} />
+                        <span>Registro Rápido con IA</span>
                     </div>
-                )}
+
+                    <div className="flex gap-2">
+                        <div className="flex-1 relative">
+                            <input
+                                type="text"
+                                placeholder={transactionType === 'income' ? "Ej: Nómina 5000 a BBVA" : "Ej: Tacos 200"}
+                                className={`w-full bg-white border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 pr-10 ${transactionType === 'income' ? 'border-green-200 focus:ring-green-200' :
+                                    transactionType === 'transfer' ? 'border-blue-200 focus:ring-blue-200' :
+                                        'border-purple-200 focus:ring-purple-200'
+                                    }`}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const val = (e.target as HTMLInputElement).value;
+                                        if (val.trim()) handleAnalyze(val);
+                                    }
+                                }}
+                            />
+                            <button
+                                onClick={(e) => {
+                                    const input = (e.currentTarget.previousElementSibling as HTMLInputElement).value;
+                                    if (input.trim()) handleAnalyze(input);
+                                }}
+                                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg ${transactionType === 'income' ? 'bg-green-100 text-green-600 hover:bg-green-200' :
+                                    transactionType === 'transfer' ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' :
+                                        'bg-purple-100 text-purple-600 hover:bg-purple-200'
+                                    }`}
+                            >
+                                <Icons.ArrowUpRight size={16} />
+                            </button>
+                        </div>
+
+                        {/* Voice Button */}
+                        <button
+                            type="button"
+                            onClick={startListening}
+                            className={`bg-white border w-12 rounded-xl flex items-center justify-center transition-colors ${transactionType === 'income' ? 'border-green-200 text-green-600 hover:bg-green-50' :
+                                transactionType === 'transfer' ? 'border-blue-200 text-blue-600 hover:bg-blue-50' :
+                                    'border-purple-200 text-purple-600 hover:bg-purple-50'
+                                }`}
+                            title="Usar Voz"
+                        >
+                            <Icons.Mic size={20} />
+                        </button>
+
+                        {/* Camera Button */}
+                        <button
+                            type="button"
+                            onClick={() => setShowCameraOptions(true)}
+                            className={`bg-white border w-12 rounded-xl flex items-center justify-center transition-colors ${transactionType === 'income' ? 'border-green-200 text-green-600 hover:bg-green-50' :
+                                transactionType === 'transfer' ? 'border-blue-200 text-blue-600 hover:bg-blue-50' :
+                                    'border-purple-200 text-purple-600 hover:bg-purple-50'
+                                }`}
+                            title="Usar Cámara"
+                        >
+                            <Icons.Camera size={20} />
+                        </button>
+
+                        {/* Hidden Inputs */}
+                        <input
+                            type="file"
+                            accept="image/*"
+                            ref={fileInputRef}
+                            className="hidden"
+                            onChange={handleFileUpload}
+                        />
+                        <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            ref={cameraInputRef}
+                            className="hidden"
+                            onChange={handleFileUpload}
+                        />
+                    </div>
+                    <p className={`text-[10px] mt-2 ml-1 ${transactionType === 'income' ? 'text-green-400' :
+                        transactionType === 'transfer' ? 'text-blue-400' :
+                            'text-purple-400'
+                        }`}>
+                        {transactionType === 'income' ? 'Ej: "Vendí bici 1500 a Efectivo"' : 'Escribe, habla o sube foto.'}
+                    </p>
+                </div>
 
                 {/* Camera Options Modal */}
                 {showCameraOptions && (
@@ -512,28 +566,58 @@ export const AddExpense: React.FC = () => {
                             </label>
 
                             {!isCreatingLoan ? (
-                                <select
-                                    value={selectedAccount}
-                                    onChange={(e) => {
-                                        if (e.target.value === 'NEW_LOAN') {
-                                            setIsCreatingLoan(true);
-                                            setSelectedAccount('');
-                                        } else {
-                                            setSelectedAccount(e.target.value);
-                                            setIsCreatingLoan(false);
-                                        }
-                                    }}
-                                    className="w-full bg-background rounded-xl py-3 px-4 text-textPrimary outline-none focus:ring-2 focus:ring-primary/50"
-                                    required={!isCreatingLoan}
-                                >
-                                    <option value="" disabled>Seleccionar cuenta...</option>
-                                    {accounts.map(acc => (
-                                        <option key={acc.id} value={acc.id}>
-                                            {acc.name} (${acc.balance}) {acc.type === 'Loan' ? '(Deuda)' : ''}
-                                        </option>
-                                    ))}
-                                    <option value="NEW_LOAN" className="text-orange-500 font-bold">+ Nueva Deuda (Alguien me prestó)</option>
-                                </select>
+                                transactionType === 'income' ? (
+                                    // ACCOUNT CHIPS FOR INCOME
+                                    <div className="flex flex-wrap gap-2">
+                                        {accounts.map(acc => (
+                                            <button
+                                                key={acc.id}
+                                                type="button"
+                                                onClick={() => setSelectedAccount(acc.id)}
+                                                className={`py-3 px-4 rounded-xl text-xs font-bold transition-all border flex items-center gap-2 ${selectedAccount === acc.id
+                                                    ? 'bg-green-500 text-white border-green-500 shadow-md transform scale-105'
+                                                    : 'bg-white border-gray-200 text-gray-600 hover:border-green-300'
+                                                    }`}
+                                            >
+                                                {acc.type === 'Cash' && <Icons.Wallet size={14} />}
+                                                {acc.type === 'Debit' && <Icons.CreditCard size={14} />}
+                                                {acc.type === 'Bank' && <Icons.Bank size={14} />}
+                                                {acc.name}
+                                            </button>
+                                        ))}
+                                        <button
+                                            type="button"
+                                            onClick={() => navigate('/wallet')}
+                                            className="py-3 px-4 rounded-xl text-xs font-bold border border-dashed border-gray-300 text-gray-400 hover:text-green-500 hover:border-green-300"
+                                        >
+                                            + Cuenta
+                                        </button>
+                                    </div>
+                                ) : (
+                                    // DROPDOWN FOR EXPENSE
+                                    <select
+                                        value={selectedAccount}
+                                        onChange={(e) => {
+                                            if (e.target.value === 'NEW_LOAN') {
+                                                setIsCreatingLoan(true);
+                                                setSelectedAccount('');
+                                            } else {
+                                                setSelectedAccount(e.target.value);
+                                                setIsCreatingLoan(false);
+                                            }
+                                        }}
+                                        className="w-full bg-background rounded-xl py-3 px-4 text-textPrimary outline-none focus:ring-2 focus:ring-primary/50"
+                                        required={!isCreatingLoan}
+                                    >
+                                        <option value="" disabled>Seleccionar cuenta...</option>
+                                        {accounts.map(acc => (
+                                            <option key={acc.id} value={acc.id}>
+                                                {acc.name} (${acc.balance}) {acc.type === 'Loan' ? '(Deuda)' : ''}
+                                            </option>
+                                        ))}
+                                        <option value="NEW_LOAN" className="text-orange-500 font-bold">+ Nueva Deuda (Alguien me prestó)</option>
+                                    </select>
+                                )
                             ) : (
                                 <div className="bg-orange-50 p-3 rounded-xl border border-orange-200 animate-fade-in">
                                     <div className="flex justify-between items-center mb-2">
@@ -558,9 +642,7 @@ export const AddExpense: React.FC = () => {
                                         Se creará una cuenta tipo "Préstamo". El gasto aumentará tu deuda con esta persona.
                                     </p>
                                 </div>
-                            )}
-
-                            {!isCreatingLoan && transactionType === 'expense' && (
+                            )}                        {!isCreatingLoan && transactionType === 'expense' && (
                                 <p className="text-[10px] text-gray-400 mt-1 ml-1">
                                     Si seleccionas una cuenta de "Préstamo", el gasto aumentará tu deuda con esa persona.
                                 </p>
@@ -591,13 +673,13 @@ export const AddExpense: React.FC = () => {
                                                 </button>
                                             )}
 
-                                            {availableCategories.map((cat) => (
+                                            {(transactionType === 'income' ? availableIncomeCategories : availableCategories).map((cat) => (
                                                 <button
                                                     type="button"
                                                     key={cat}
                                                     onClick={() => setCategory(cat)}
                                                     className={`py-2 px-4 rounded-full text-xs font-bold transition-all border ${category === cat
-                                                        ? 'bg-primary text-white border-primary shadow-md transform scale-105'
+                                                        ? (transactionType === 'income' ? 'bg-green-500 text-white border-green-500' : 'bg-primary text-white border-primary') + ' shadow-md transform scale-105'
                                                         : 'bg-white border-gray-200 text-textSecondary hover:border-primary hover:text-primary'
                                                         }`}
                                                 >

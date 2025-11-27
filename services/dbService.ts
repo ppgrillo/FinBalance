@@ -215,49 +215,62 @@ export const dbService = {
     }
   },
 
-  getCategories: async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .or(`user_id.is.null,user_id.eq.${user.id}`)
-        .order('name');
-      if (error) throw error;
-      return data || [];
-    } catch (error) { return []; }
+  /**
+   * Get all categories
+   */
+  getCategories: async (): Promise<{ id: string, name: string, type: string, color?: string }[]> => {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('id, name, type, color')
+      .order('name');
+
+    if (error) throw error;
+    return data || [];
   },
 
-  createCategory: async (name: string, color: string = '#A88BEB', icon?: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('No authenticated user');
-      const { data: existing } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('name', name)
-        .eq('user_id', user.id)
-        .single();
+  /**
+   * Create a new category
+   */
+  createCategory: async (name: string, type: 'expense' | 'income' = 'expense'): Promise<any> => {
+    // Check if exists
+    const { data: existing } = await supabase
+      .from('categories')
+      .select('id')
+      .ilike('name', name)
+      .eq('type', type)
+      .single();
 
-      if (existing) return dbService.updateCategory(existing.id, { color });
+    if (existing) return existing;
 
-      const { data, error } = await supabase
-        .from('categories')
-        .insert({ user_id: user.id, name: name, color: color, icon: icon })
-        .select()
-        .single();
+    const { data, error } = await supabase
+      .from('categories')
+      .insert([{ name, type, user_id: (await supabase.auth.getUser()).data.user?.id }])
+      .select()
+      .single();
 
-      if (error) throw error;
-      return data;
-    } catch (error) { throw error; }
+    if (error) throw error;
+    return data;
   },
 
-  updateCategory: async (id: string, updates: { color?: string, name?: string }) => {
+  updateCategory: async (id: string, updates: { color?: string, name?: string, type?: 'expense' | 'income' }) => {
     try {
       const { error } = await supabase.from('categories').update(updates).eq('id', id);
       if (error) throw error;
     } catch (error) { throw error; }
+  },
+
+  getExpensesByCategory: async (categoryName: string, limit: number = 5) => {
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('category_name', categoryName)
+        .order('date', { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+      return data ? data.map(mapExpense) : [];
+    } catch (error) { return []; }
   },
 
   ensureCategoryExists: async (name: string, color: string) => {
@@ -277,10 +290,10 @@ export const dbService = {
         } else {
           const { data: shadow } = await supabase.from('categories').select('*').eq('name', name).eq('user_id', user.id).maybeSingle();
           if (shadow) await dbService.updateCategory(shadow.id, { color });
-          else await dbService.createCategory(name, color);
+          else await dbService.createCategory(name, 'expense');
         }
       } else {
-        await dbService.createCategory(name, color);
+        await dbService.createCategory(name, 'expense');
       }
     } catch (e) { console.error("Error ensuring category", e); }
   },

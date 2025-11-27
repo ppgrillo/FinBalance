@@ -13,6 +13,7 @@ import { ExpensesList } from './pages/ExpensesList';
 import { Profile } from './pages/Profile';
 import { ToastProvider } from './context/ToastContext';
 import { Goals } from './pages/Goals';
+import { Categories } from './pages/Categories';
 import { Wallet } from './pages/Wallet';
 import { authService } from './services/authService';
 import { User } from './types';
@@ -120,6 +121,7 @@ export default function App() {
             <Route path="/chat" element={<ChatAI />} />
             <Route path="/profile" element={<Profile user={user} onUpdate={refreshUser} />} />
             <Route path="/goals" element={<Goals />} />
+            <Route path="/categories" element={<Categories />} />
             <Route path="/wallet" element={<Wallet />} />
             <Route path="/login" element={<Navigate to="/" />} />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -10,6 +10,16 @@ export enum CategoryType {
   Others = 'Otros'
 }
 
+export enum IncomeCategoryType {
+  Salary = 'Salario',
+  Business = 'Negocio',
+  Gift = 'Regalo',
+  Sale = 'Venta',
+  Investment = 'Inversión',
+  Loan = 'Préstamo',
+  Other = 'Otros'
+}
+
 // Allow dynamic categories (strings)
 export type Category = CategoryType | string;
 

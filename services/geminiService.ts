@@ -215,74 +215,82 @@ export const geminiService = {
   /**
    * Analyze text or image to extract expense details
    */
-  analyzeExpense: async (
-    textInput?: string,
-    imageBase64?: string,
-    availableCategories: string[] = []
-  ): Promise<Partial<Expense>> => {
+  analyzeExpense: async (text?: string, imageBase64?: string, availableCategories?: string[], availableIncomeCategories?: string[], availableAccounts?: string[]): Promise<{
+    amount?: number;
+    category?: string;
+    description?: string;
+    type?: 'expense' | 'income' | 'transfer';
+    destinationAccount?: string;
+  }> => {
     try {
-      if (!ai) {
-        throw new Error("Gemini API Key missing");
-      }
+      if (!ai) throw new Error("AI not initialized");
+
       const model = "gemini-2.5-flash";
 
-      const parts: any[] = [];
-      const categoriesContext = availableCategories.length > 0
-        ? `Categorías existentes: ${availableCategories.join(', ')}.`
-        : "";
+      const prompt = `
+        Analiza el siguiente texto o imagen de una transacción financiera.
+        
+        Tus objetivos:
+        1. Extraer el monto (número).
+        2. Identificar si es Gasto (expense), Ingreso (income) o Transferencia (transfer).
+           - Palabras clave Ingreso: "gané", "recibí", "depósito", "nómina", "venta", "cobré".
+           - Palabras clave Gasto: "pagué", "compré", "gasté", "salida".
+        3. Categorizar la transacción:
+           - Si es Gasto, usa estas categorías: ${availableCategories?.join(', ') || 'Comida, Transporte, Vivienda, Otros'}.
+           - Si es Ingreso, usa estas categorías: ${availableIncomeCategories?.join(', ') || 'Salario, Negocio, Regalo, Venta, Inversión, Otros'}.
+           - Si no encaja, sugiere una nueva corta.
+        4. Generar una descripción corta y clara.
+        5. Identificar la CUENTA DE DESTINO (para ingresos) o FUENTE (para gastos) si se menciona.
+           - Cuentas disponibles: ${availableAccounts?.join(', ') || 'Ninguna específica'}.
+           - Ejemplo: "Depósito a BBVA" -> destinationAccount: "BBVA".
+        
+        Responde SOLO un JSON válido con este formato:
+        {
+          "amount": number,
+          "category": "string",
+          "description": "string",
+          "type": "expense" | "income" | "transfer",
+          "destinationAccount": "string (nombre de la cuenta detectada o null)"
+        }
 
-      const systemPrompt = `
-        Analiza el gasto.
-        ${categoriesContext}
-        INSTRUCCIÓN: Prioriza SIEMPRE usar una de las categorías existentes si el gasto encaja (aunque sea vagamente).
-        Solo sugiere una categoría nueva si el concepto es DRASTICAMENTE diferente a las existentes.
-        Ejemplo: Si existe 'Salidas' y el gasto es 'Cine', usa 'Salidas'. No crees 'Entretenimiento'.
+        Texto: "${text || ''}"
       `;
+
+      const parts: any[] = [];
 
       if (imageBase64) {
         parts.push({
           inlineData: {
-            mimeType: 'image/jpeg',
+            mimeType: "image/jpeg",
             data: imageBase64
           }
         });
-        parts.push({ text: `${systemPrompt} Extrae total, categoría y descripción.` });
-      } else if (textInput) {
-        parts.push({ text: `${systemPrompt} Gasto: "${textInput}". Extrae monto, categoría y descripción.` });
       }
 
-      const response = await ai.models.generateContent({
+      parts.push({ text: prompt });
+
+      const result = await ai.models.generateContent({
         model,
-        contents: { parts },
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              amount: { type: Type.NUMBER },
-              category: { type: Type.STRING, description: "Category from the list OR a new one if absolutely necessary." },
-              description: { type: Type.STRING },
-              date: { type: Type.STRING, description: "ISO Date string if found, else today" }
-            },
-            required: ["amount", "category", "description"]
-          }
-        }
+        contents: [{ role: "user", parts }]
       });
 
-      const jsonText = response.text;
-      if (!jsonText) throw new Error("Empty response");
+      const textResponse = result.text;
 
-      const data = JSON.parse(jsonText);
+      // Clean JSON
+      const jsonString = textResponse ? textResponse.replace(/```json/g, '').replace(/```/g, '').trim() : "{}";
+      const data = JSON.parse(jsonString);
+
       return {
         amount: data.amount,
         category: data.category,
         description: data.description,
-        date: data.date || new Date().toISOString()
+        type: data.type,
+        destinationAccount: data.destinationAccount
       };
 
-    } catch (error) {
-      console.error("Gemini Analysis Error:", error);
-      throw new Error("No se pudo analizar el gasto.");
+    } catch (e) {
+      console.error("Error analyzing expense:", e);
+      return {};
     }
   }
 };
