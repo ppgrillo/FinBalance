@@ -1,10 +1,19 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Poppins', sans-serif;
+
+  --color-primary: #A88BEB;
+  --color-secondary: #F8C0FF;
+  --color-accent: #F9F871;
+  --color-background: #F7F8FA;
+  --color-textPrimary: #1E1E1E;
+  --color-textSecondary: #6B6B6B;
+}
 
 body {
-  background-color: #F7F8FA;
-  color: #1E1E1E;
+  background-color: var(--color-background);
+  color: var(--color-textPrimary);
 }
 
 /* Hide scrollbar for clean UI */
