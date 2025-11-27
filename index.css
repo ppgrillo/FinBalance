@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #F7F8FA;
+  color: #1E1E1E;
+}
+
+/* Hide scrollbar for clean UI */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}

@@ -7,7 +7,15 @@ import { dbService } from "./dbService";
 // La API Key se obtiene de process.env.API_KEY
 // ------------------------------------------------------------------
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+// ------------------------------------------------------------------
+
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+if (!apiKey) {
+  console.error("❌ VITE_GEMINI_API_KEY is missing! The AI features will not work.");
+}
+
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 // Definition of the tool available to Gemini
 const queryExpensesTool: FunctionDeclaration = {
@@ -43,6 +51,9 @@ export const geminiService = {
    */
   chat: async (history: { role: 'user' | 'model'; text: string }[]): Promise<string> => {
     try {
+      if (!ai) {
+        return "⚠️ Error de configuración: Falta la API Key de Gemini. Por favor configúrala en el archivo .env o en Netlify.";
+      }
       const model = "gemini-2.5-flash";
       const systemInstruction = `
         Eres 'FinBot', el experto asesor financiero de la app FinBalance.
@@ -143,6 +154,9 @@ export const geminiService = {
    */
   createSavingsPlan: async (goalName: string, amount: number, deadline: string, contextData: string): Promise<{ planText: string, monthlyContribution: number }> => {
     try {
+      if (!ai) {
+        throw new Error("Gemini API Key missing");
+      }
       const model = "gemini-2.5-flash";
       const prompt = `
         El usuario quiere lograr la meta: "${goalName}" con un costo de $${amount} para la fecha ${deadline}.
@@ -206,6 +220,9 @@ export const geminiService = {
     imageBase64?: string
   ): Promise<Partial<Expense>> => {
     try {
+      if (!ai) {
+        throw new Error("Gemini API Key missing");
+      }
       const model = "gemini-2.5-flash";
 
       const parts: any[] = [];
