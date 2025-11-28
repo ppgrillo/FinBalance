@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FinBalance</string>
+    <string name="title_activity_main">FinBalance</string>
+    <string name="package_name">com.finbalance.app</string>
+    <string name="custom_url_scheme">com.finbalance.app</string>
+</resources>

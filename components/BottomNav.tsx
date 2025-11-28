@@ -6,7 +6,7 @@ export const BottomNav: React.FC = () => {
   const location = useLocation();
 
   const isActive = (path: string) => location.pathname === path;
-  
+
   const navItems = [
     { path: '/', icon: Icons.Home, label: 'Inicio' },
     { path: '/expenses', icon: Icons.List, label: 'Gastos' }, // Changed from Budgets
@@ -21,7 +21,7 @@ export const BottomNav: React.FC = () => {
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
-          
+
           if (item.special) {
             return (
               <Link key={item.path} to={item.path} className="-mt-8">
@@ -34,9 +34,9 @@ export const BottomNav: React.FC = () => {
 
           return (
             <Link key={item.path} to={item.path} className="flex flex-col items-center gap-1 w-16">
-              <Icon 
-                size={24} 
-                className={`transition-colors ${active ? 'text-primary' : 'text-gray-400'}`} 
+              <Icon
+                size={24}
+                className={`transition-colors ${active ? 'text-primary' : 'text-gray-400'}`}
                 strokeWidth={active ? 2.5 : 2}
               />
               <span className={`text-[10px] font-medium ${active ? 'text-primary' : 'text-gray-400'}`}>

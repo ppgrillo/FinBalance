@@ -18,18 +18,21 @@ import { Wallet } from './pages/Wallet';
 import { authService } from './services/authService';
 import { User } from './types';
 import { supabase } from './lib/supabaseClient';
+import { AdMob, BannerAdSize, BannerAdPosition } from '@capacitor-community/admob';
+import { subscriptionService } from './services/subscriptionService';
 
 interface LayoutProps {
   children: React.ReactNode;
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (open: boolean) => void;
+  isAdVisible: boolean;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, mobileMenuOpen, setMobileMenuOpen }) => {
+const Layout: React.FC<LayoutProps> = ({ children, mobileMenuOpen, setMobileMenuOpen, isAdVisible }) => {
   return (
     <div className="min-h-screen bg-background font-sans text-textPrimary flex">
-      <Sidebar isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
-      <div className="flex-1 md:ml-64 relative w-full min-h-screen transition-all duration-300 bg-background">
+      <Sidebar isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} isAdVisible={isAdVisible} />
+      <div className={`flex-1 md:ml-64 relative w-full min-h-screen transition-all duration-300 bg-background ${isAdVisible ? 'pt-16' : ''}`}>
         <div className="max-w-6xl mx-auto">
           <div className="p-5 pb-28 md:p-10">
             {children}
@@ -45,6 +48,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isAdVisible, setIsAdVisible] = useState(false);
 
   const refreshUser = async (session: any = null) => {
     try {
@@ -59,7 +63,38 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Initialize AdMob
+    const initAds = async () => {
+      try {
+        // Only run on native platforms
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) {
+          await AdMob.initialize({
+            initializeForTesting: true,
+          });
+
+          const isPremium = await subscriptionService.checkSubscriptionStatus();
+          if (!isPremium) {
+            setIsAdVisible(true);
+            await AdMob.showBanner({
+              adId: 'ca-app-pub-3940256099942544/6300978111', // Test Banner ID
+              adSize: BannerAdSize.ADAPTIVE_BANNER,
+              position: BannerAdPosition.TOP_CENTER,
+              margin: 0,
+              isTesting: true
+            });
+          }
+        }
+      } catch (e) {
+        console.error("AdMob init error", e);
+      }
+    };
+    initAds();
+  }, []);
+
+  useEffect(() => {
     // Check active session
+    // ... existing auth check ...
     const checkSession = async () => {
       console.log("App: checkSession starting...");
       await refreshUser();
@@ -145,7 +180,7 @@ export default function App() {
   return (
     <ToastProvider>
       <Router>
-        <Layout mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen}>
+        <Layout mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} isAdVisible={isAdVisible}>
           <Routes>
             <Route path="/" element={<Dashboard user={user} onMenuClick={() => setMobileMenuOpen(true)} />} />
             <Route path="/budgets" element={<Budgets user={user} />} />

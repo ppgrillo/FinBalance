@@ -9,9 +9,10 @@ import { subscriptionService } from '../services/subscriptionService';
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
+  isAdVisible?: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose, isAdVisible = false }) => {
   const location = useLocation();
   const [showPaywall, setShowPaywall] = useState(false);
   const isActive = (path: string) => location.pathname === path;
@@ -50,6 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
         transform transition-transform duration-300 ease-in-out flex flex-col h-full
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         md:translate-x-0
+        ${isAdVisible ? 'pt-16' : ''}
       `}>
         <div className="p-8 flex items-center justify-between md:justify-start gap-3">
           <div className="flex items-center gap-3">
