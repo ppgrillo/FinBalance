@@ -30,6 +30,10 @@ export const AddExpense: React.FC = () => {
     const [isCreatingLoan, setIsCreatingLoan] = useState(false);
     const [newLoanName, setNewLoanName] = useState('');
 
+    // Queue State for Multi-Expense
+    const [expenseQueue, setExpenseQueue] = useState<any[]>([]);
+    const [currentQueueIndex, setCurrentQueueIndex] = useState(0);
+
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
     const [availableIncomeCategories, setAvailableIncomeCategories] = useState<string[]>(Object.values(IncomeCategoryType));
@@ -68,8 +72,8 @@ export const AddExpense: React.FC = () => {
                 setAvailableIncomeCategories(incomeCats);
 
                 // Set default category selection
-                if (catNames.length > 0) {
-                    const defaultCat = catNames.find(c => c === 'Otros' || c === 'Others') || catNames[0];
+                if (expenseCats.length > 0) {
+                    const defaultCat = expenseCats.find(c => c === 'Otros' || c === 'Others') || expenseCats[0];
                     setCategory(defaultCat);
                 }
 
@@ -164,25 +168,39 @@ export const AddExpense: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const success = await saveTransaction();
+        if (success) {
+            // Check if queue has more items
+            if (expenseQueue.length > 0 && currentQueueIndex < expenseQueue.length - 1) {
+                const nextIndex = currentQueueIndex + 1;
+                setCurrentQueueIndex(nextIndex);
+                applyExpenseToForm(expenseQueue[nextIndex]);
+            } else {
+                navigate('/');
+            }
+        }
+    };
+
+    const saveTransaction = async (): Promise<boolean> => {
         const val = parseFloat(amount);
         if (!val || val <= 0) {
             alert("Ingresa un monto válido");
-            return;
+            return false;
         }
 
         if (transactionType === 'transfer' && (!destAccount || destAccount === selectedAccount)) {
             alert('Selecciona una cuenta de destino diferente al origen');
-            return;
+            return false;
         }
 
         if (transactionType !== 'transfer' && isCreatingLoan && !newLoanName.trim()) {
             alert("Ingresa el nombre del préstamo o acreedor.");
-            return;
+            return false;
         }
 
         if (!selectedAccount && !isCreatingLoan && accounts.length > 0) {
             alert('Selecciona una cuenta');
-            return;
+            return false;
         }
 
         setLoading(true);
@@ -230,18 +248,64 @@ export const AddExpense: React.FC = () => {
                 }, effectiveAccountId);
             }
 
-            navigate('/');
+            return true;
         } catch (e: any) {
             alert('Error al guardar la transacción: ' + (e.message || "Error desconocido"));
+            return false;
         } finally {
             setLoading(false);
         }
     };
 
+    const applyExpenseToForm = (result: any) => {
+        if (result.amount) setAmount(result.amount.toString());
+
+        // Handle Type Switching
+        if (result.type) {
+            setTransactionType(result.type);
+        }
+
+        // Handle Category
+        if (result.category) {
+            const targetList = result.type === 'income' ? availableIncomeCategories : availableCategories;
+            const match = targetList.find(c => c.toLowerCase() === result.category?.toLowerCase());
+
+            if (match) {
+                setCategory(match);
+                setSuggestedCategory(null);
+                setIsCustomCategory(false);
+            } else {
+                setCategory(result.category);
+                setSuggestedCategory(result.category);
+                setIsCustomCategory(false);
+            }
+        }
+
+        // Handle Account (Source or Destination)
+        if (result.destinationAccount) {
+            // Fuzzy match account name
+            const accMatch = accounts.find(a =>
+                a.name.toLowerCase().includes(result.destinationAccount!.toLowerCase()) ||
+                result.destinationAccount!.toLowerCase().includes(a.name.toLowerCase())
+            );
+            if (accMatch) {
+                setSelectedAccount(accMatch.id);
+            }
+        } else {
+            // If AI didn't detect an account, revert to default
+            const defaultAcc = accounts.find(a => a.isDefault);
+            if (defaultAcc) {
+                setSelectedAccount(defaultAcc.id);
+            }
+        }
+
+        if (result.description) setDescription(result.description);
+    };
+
     const handleAnalyze = async (text?: string, base64Img?: string) => {
         setLoading(true);
         try {
-            const result = await geminiService.analyzeExpense(
+            const results = await geminiService.analyzeExpense(
                 text,
                 base64Img,
                 availableCategories,
@@ -249,47 +313,28 @@ export const AddExpense: React.FC = () => {
                 accounts.map(a => a.name)
             );
 
-            if (result.amount) setAmount(result.amount.toString());
-
-            // Handle Type Switching
-            if (result.type) {
-                setTransactionType(result.type);
+            if (results && results.length > 0) {
+                setExpenseQueue(results);
+                setCurrentQueueIndex(0);
+                applyExpenseToForm(results[0]);
+            } else {
+                alert("No se pudo entender la transacción.");
             }
-
-            // Handle Category
-            if (result.category) {
-                const targetList = result.type === 'income' ? availableIncomeCategories : availableCategories;
-                const match = targetList.find(c => c.toLowerCase() === result.category?.toLowerCase());
-
-                if (match) {
-                    setCategory(match);
-                    setSuggestedCategory(null);
-                    setIsCustomCategory(false);
-                } else {
-                    setCategory(result.category);
-                    setSuggestedCategory(result.category);
-                    setIsCustomCategory(false);
-                }
-            }
-
-            // Handle Account (Source or Destination)
-            if (result.destinationAccount) {
-                // Fuzzy match account name
-                const accMatch = accounts.find(a =>
-                    a.name.toLowerCase().includes(result.destinationAccount!.toLowerCase()) ||
-                    result.destinationAccount!.toLowerCase().includes(a.name.toLowerCase())
-                );
-                if (accMatch) {
-                    setSelectedAccount(accMatch.id);
-                }
-            }
-
-            if (result.description) setDescription(result.description);
 
         } catch (e) {
             alert("No se pudo analizar.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSkip = () => {
+        if (expenseQueue.length > 0 && currentQueueIndex < expenseQueue.length - 1) {
+            const nextIndex = currentQueueIndex + 1;
+            setCurrentQueueIndex(nextIndex);
+            applyExpenseToForm(expenseQueue[nextIndex]);
+        } else {
+            navigate('/');
         }
     };
 
@@ -708,9 +753,9 @@ export const AddExpense: React.FC = () => {
                                             <button
                                                 type="button"
                                                 onClick={() => { setIsCustomCategory(false); setCategory(availableCategories[0] || ''); }}
-                                                className="bg-gray-200 px-4 rounded-xl text-gray-600 hover:bg-gray-300 transition-colors"
+                                                className="bg-gray-200 text-gray-500 rounded-xl px-4 hover:bg-gray-300"
                                             >
-                                                <Icons.Close />
+                                                <Icons.Close size={16} />
                                             </button>
                                         </div>
                                     )}
@@ -718,29 +763,70 @@ export const AddExpense: React.FC = () => {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-textSecondary uppercase tracking-wider mb-2">Descripción</label>
+                                <label className="block text-xs font-bold text-textSecondary uppercase tracking-wider mb-2">Descripción (Opcional)</label>
                                 <input
                                     type="text"
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
+                                    placeholder="¿Qué compraste?"
                                     className="w-full bg-background rounded-xl py-3 px-4 text-textPrimary outline-none focus:ring-2 focus:ring-primary/50"
-                                    placeholder={transactionType === 'income' ? "¿De qué es el ingreso?" : "¿Qué compraste?"}
-                                    required
                                 />
                             </div>
                         </>
                     )}
 
-                    <button
-                        type="submit"
-                        className={`w-full text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 ${transactionType === 'income' ? 'bg-green-500 hover:bg-green-600 shadow-green-500/30' :
-                            transactionType === 'transfer' ? 'bg-blue-500 hover:bg-blue-600 shadow-blue-500/30' :
-                                'bg-primary hover:bg-purple-600 shadow-primary/30'
-                            }`}
-                    >
-                        <Icons.Check size={20} />
-                        {transactionType === 'income' ? 'Guardar Ingreso' : transactionType === 'transfer' ? 'Realizar Transferencia' : 'Guardar Gasto'}
-                    </button>
+                    {/* WIZARD HEADER */}
+                    {expenseQueue.length > 1 && (
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-4 animate-fade-in">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                                    Revisando Gasto {currentQueueIndex + 1} de {expenseQueue.length}
+                                </span>
+                                <span className="text-xs font-bold text-indigo-400">
+                                    {Math.round(((currentQueueIndex + 1) / expenseQueue.length) * 100)}%
+                                </span>
+                            </div>
+                            <div className="w-full bg-indigo-200 rounded-full h-1.5">
+                                <div
+                                    className="bg-indigo-500 h-1.5 rounded-full transition-all duration-300"
+                                    style={{ width: `${((currentQueueIndex + 1) / expenseQueue.length) * 100}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex gap-3 pt-4">
+                        {expenseQueue.length > 1 && (
+                            <button
+                                type="button"
+                                onClick={handleSkip}
+                                className="flex-1 bg-gray-100 text-gray-500 font-bold py-4 rounded-xl hover:bg-gray-200 transition-all"
+                            >
+                                Saltar
+                            </button>
+                        )}
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className={`flex-1 font-bold py-4 rounded-xl shadow-lg transition-all disabled:opacity-50 flex justify-center items-center gap-2 ${transactionType === 'income' ? 'bg-green-500 text-white shadow-green-500/30 hover:bg-green-600' :
+                                transactionType === 'transfer' ? 'bg-blue-500 text-white shadow-blue-500/30 hover:bg-blue-600' :
+                                    'bg-primary text-white shadow-primary/30 hover:bg-purple-600'
+                                }`}
+                        >
+                            {loading ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    <Icons.Check size={20} />
+                                    {expenseQueue.length > 1 && currentQueueIndex < expenseQueue.length - 1
+                                        ? 'Guardar y Siguiente'
+                                        : 'Guardar Transacción'
+                                    }
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>

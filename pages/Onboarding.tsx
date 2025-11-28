@@ -195,7 +195,7 @@ export const Onboarding: React.FC<Props> = ({ onLogin }) => {
             type="button"
             onClick={async () => {
               setLoading(true);
-              const { error } = await authService.signInWithGoogle();
+              const { error } = await authService.signInWithOAuth();
               if (error) {
                 console.error(error);
                 setErrorMsg("Error al conectar con Google");

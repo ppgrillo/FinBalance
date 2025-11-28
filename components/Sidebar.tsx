@@ -1,7 +1,10 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { Icons } from './Icons';
+import { Paywall } from './Paywall';
+import { subscriptionService } from '../services/subscriptionService';
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -10,7 +13,14 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const location = useLocation();
+  const [showPaywall, setShowPaywall] = useState(false);
   const isActive = (path: string) => location.pathname === path;
+
+  const handlePremiumClick = async () => {
+    // Always use custom UI since we are on an older SDK version
+    // that doesn't support the latest native Paywalls
+    setShowPaywall(true);
+  };
 
   const navItems = [
     { path: '/', icon: Icons.Home, label: 'Inicio' },
@@ -66,6 +76,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
             <span>Registrar Gasto</span>
           </Link>
 
+          {/* Premium Banner */}
+          <button
+            onClick={handlePremiumClick}
+            className="w-full mb-4 p-3 rounded-xl bg-gradient-to-r from-amber-200 to-yellow-400 text-yellow-900 flex items-center gap-3 shadow-sm hover:shadow-md transition-all group"
+          >
+            <div className="bg-white/30 p-1.5 rounded-lg group-hover:rotate-12 transition-transform">
+              <Icons.Crown size={18} strokeWidth={2.5} />
+            </div>
+            <div className="text-left">
+              <span className="block text-xs font-bold uppercase tracking-wider opacity-80">Upgrade</span>
+              <span className="block font-bold text-sm">Obtener Premium</span>
+            </div>
+          </button>
+
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.path);
@@ -76,8 +100,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
                 to={item.path}
                 onClick={onClose}
                 className={`flex items-center gap-4 p-4 rounded-xl transition-all duration-200 ${active
-                    ? 'bg-gray-50 text-primary font-semibold shadow-sm translate-x-1'
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-textPrimary'
+                  ? 'bg-gray-50 text-primary font-semibold shadow-sm translate-x-1'
+                  : 'text-gray-500 hover:bg-gray-50 hover:text-textPrimary'
                   }`}
               >
                 <Icon size={20} strokeWidth={active ? 2.5 : 2} className={active ? 'scale-110 transition-transform' : ''} />
@@ -94,6 +118,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
           </div>
         </div>
       </aside>
+
+      {/* Paywall Modal */}
+      {showPaywall && (
+        <Paywall
+          onClose={() => setShowPaywall(false)}
+          onSuccess={() => setShowPaywall(false)}
+        />
+      )}
     </>
   );
 };

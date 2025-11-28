@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Icons } from '../components/Icons';
 import { Budget, CategoryType, Expense } from '../types';
 import { dbService } from '../services/dbService';
@@ -14,6 +15,8 @@ interface Props {
 
 export const Budgets: React.FC<Props> = ({ user }) => {
     const { success, error, warning } = useToast();
+    const location = useLocation();
+    const navigate = useNavigate();
     const [budgets, setBudgets] = useState<Budget[]>([]);
     const [categories, setCategories] = useState<{ name: string, color?: string }[]>([]);
     const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -90,6 +93,18 @@ export const Budgets: React.FC<Props> = ({ user }) => {
     useEffect(() => {
         loadData();
     }, []);
+
+    // Auto-expand logic
+    useEffect(() => {
+        if (budgets.length > 0 && location.state?.expandCategory) {
+            const target = budgets.find(b => b.category === location.state.expandCategory);
+            if (target) {
+                setSelectedBudgetForDetail(target);
+                // Clear state so it doesn't re-trigger
+                navigate(location.pathname, { replace: true, state: {} });
+            }
+        }
+    }, [budgets, location.state, navigate, location.pathname]);
 
     const openEdit = (budget: Budget) => {
         // Switch from Detail View to Edit View

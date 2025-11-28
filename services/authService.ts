@@ -52,18 +52,28 @@ export const authService = {
     }
   },
 
-  signInWithGoogle: async () => {
+  signInWithOAuth: async (): Promise<{ error: string | null }> => {
     try {
+      const { Capacitor } = await import('@capacitor/core');
+      const isNative = Capacitor.isNativePlatform();
+
+      const redirectTo = isNative
+        ? 'com.finbalance.app://google-auth'
+        : window.location.origin;
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin
+          redirectTo,
+          skipBrowserRedirect: false // Ensure browser opens for auth
         }
       });
-      return { data, error };
-    } catch (e) {
-      console.error("Google Auth Error:", e);
-      return { data: null, error: e };
+
+      if (error) return { error: error.message };
+      return { error: null };
+    } catch (e: any) {
+      console.error("OAuth Error:", e);
+      return { error: "Error iniciando sesión con Google." };
     }
   },
 

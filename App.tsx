@@ -90,9 +90,44 @@ export default function App() {
       }
     });
 
+    // Listen for Deep Links (Native Auth Redirect)
+    import('@capacitor/app').then(({ App }) => {
+      App.addListener('appUrlOpen', async (event) => {
+        console.log('App URL Open:', event.url);
+        if (event.url.includes('access_token') || event.url.includes('refresh_token')) {
+          // Extract hash from URL
+          const hashIndex = event.url.indexOf('#');
+          if (hashIndex !== -1) {
+            const hash = event.url.substring(hashIndex);
+            // Pass the hash to Supabase to establish session
+            const { data, error } = await supabase.auth.getSession();
+            if (!data.session) {
+              // If getSession didn't pick it up automatically (which it might not on native),
+              // we might need to manually parse. But usually Supabase handles it if the URL is correct.
+              // Let's try setting the session manually if we can parse it, or just rely on the fact
+              // that we are opening the app.
+
+              // Actually, for Supabase + Capacitor, the recommended way is:
+              const params = new URLSearchParams(hash.substring(1));
+              const access_token = params.get('access_token');
+              const refresh_token = params.get('refresh_token');
+
+              if (access_token && refresh_token) {
+                await supabase.auth.setSession({
+                  access_token,
+                  refresh_token
+                });
+              }
+            }
+          }
+        }
+      });
+    });
+
     return () => {
       clearTimeout(safetyTimer);
       authListener.subscription.unsubscribe();
+      import('@capacitor/app').then(({ App }) => App.removeAllListeners());
     };
   }, []);
 

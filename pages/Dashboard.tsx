@@ -592,7 +592,11 @@ export const Dashboard: React.FC<Props> = ({ user, onMenuClick }) => {
 
                     <div className="grid grid-cols-2 gap-3 md:flex md:gap-4 md:overflow-x-auto md:pb-4 md:snap-x md:scrollbar-hide">
                         {budgets.slice(0, 4).map(b => (
-                            <div key={b.category} className="min-w-0 md:min-w-[140px] bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:shadow-md transition-shadow flex-shrink-0">
+                            <div
+                                key={b.category}
+                                onClick={() => navigate('/budgets', { state: { expandCategory: b.category } })}
+                                className="min-w-0 md:min-w-[140px] bg-white p-4 rounded-2xl shadow-sm border border-gray-50 hover:shadow-md transition-shadow flex-shrink-0 cursor-pointer"
+                            >
                                 <div className="w-8 h-8 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: `${b.color}20` }}>
                                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: b.color }}></div>
                                 </div>

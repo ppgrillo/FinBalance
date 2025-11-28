@@ -215,20 +215,20 @@ export const geminiService = {
   /**
    * Analyze text or image to extract expense details
    */
-  analyzeExpense: async (text?: string, imageBase64?: string, availableCategories?: string[], availableIncomeCategories?: string[], availableAccounts?: string[]): Promise<{
+  analyzeExpense: async (text?: string, imageBase64?: string, availableCategories?: string[], availableIncomeCategories?: string[], availableAccounts?: string[]): Promise<Array<{
     amount?: number;
     category?: string;
     description?: string;
     type?: 'expense' | 'income' | 'transfer';
     destinationAccount?: string;
-  }> => {
+  }>> => {
     try {
       if (!ai) throw new Error("AI not initialized");
 
       const model = "gemini-2.5-flash";
 
       const prompt = `
-        Analiza el siguiente texto o imagen de una transacción financiera.
+        Analiza el siguiente texto o imagen de una o varias transacciones financieras.
         
         Tus objetivos:
         1. Extraer el monto (número).
@@ -244,14 +244,18 @@ export const geminiService = {
            - Cuentas disponibles: ${availableAccounts?.join(', ') || 'Ninguna específica'}.
            - Ejemplo: "Depósito a BBVA" -> destinationAccount: "BBVA".
         
-        Responde SOLO un JSON válido con este formato:
-        {
-          "amount": number,
-          "category": "string",
-          "description": "string",
-          "type": "expense" | "income" | "transfer",
-          "destinationAccount": "string (nombre de la cuenta detectada o null)"
-        }
+        IMPORTANTE: Si el texto contiene MÚLTIPLES transacciones (ej. "500 cine y 200 super"), sepáralas en objetos distintos.
+
+        Responde SOLO un JSON válido que sea un ARRAY de objetos con este formato:
+        [
+          {
+            "amount": number,
+            "category": "string",
+            "description": "string",
+            "type": "expense" | "income" | "transfer",
+            "destinationAccount": "string (nombre de la cuenta detectada o null)"
+          }
+        ]
 
         Texto: "${text || ''}"
       `;
@@ -277,20 +281,19 @@ export const geminiService = {
       const textResponse = result.text;
 
       // Clean JSON
-      const jsonString = textResponse ? textResponse.replace(/```json/g, '').replace(/```/g, '').trim() : "{}";
-      const data = JSON.parse(jsonString);
+      const jsonString = textResponse ? textResponse.replace(/```json/g, '').replace(/```/g, '').trim() : "[]";
+      let data = JSON.parse(jsonString);
 
-      return {
-        amount: data.amount,
-        category: data.category,
-        description: data.description,
-        type: data.type,
-        destinationAccount: data.destinationAccount
-      };
+      // Ensure it's always an array
+      if (!Array.isArray(data)) {
+        data = [data];
+      }
+
+      return data;
 
     } catch (e) {
       console.error("Error analyzing expense:", e);
-      return {};
+      return [];
     }
   }
 };
