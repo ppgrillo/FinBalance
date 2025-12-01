@@ -3,12 +3,14 @@ import React, { useState } from 'react';
 import { authService } from '../services/authService';
 import { User } from '../types';
 import { Icons } from '../components/Icons';
+import { useToast } from '../context/ToastContext';
 
 interface Props {
   onLogin: (user: User) => void;
 }
 
 export const Onboarding: React.FC<Props> = ({ onLogin }) => {
+  const { success } = useToast();
   const [step, setStep] = useState<'intro' | 'auth'>('intro');
   const [mode, setMode] = useState<'login' | 'register'>('login');
 
@@ -55,7 +57,7 @@ export const Onboarding: React.FC<Props> = ({ onLogin }) => {
         }
       } else if (result.user) {
         if (mode === 'register' && !result.user.id) {
-          alert("Registro exitoso. Por favor verifica tu correo electrónico antes de iniciar sesión.");
+          success("Registro exitoso. Por favor verifica tu correo electrónico antes de iniciar sesión.");
           setMode('login');
         } else {
           onLogin(result.user);

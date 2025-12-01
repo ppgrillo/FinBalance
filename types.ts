@@ -33,6 +33,15 @@ export interface Expense {
   accountId?: string;
 }
 
+export interface Income {
+  id: string;
+  amount: number;
+  category: string;
+  description: string;
+  date: string;
+  accountId: string;
+}
+
 export interface Budget {
   category: Category;
   limit: number;
@@ -64,7 +73,7 @@ export interface RecurringItem {
   name: string;
   amount: number; // Estimated amount for variable items
   category: Category;
-  frequency: 'Mensual' | 'Anual' | 'Semanal';
+  frequency: 'Mensual' | 'Anual' | 'Semanal' | 'Quincenal' | 'Trimestral';
   nextDate: string;
   isVariable?: boolean; // NEW: If true, asks user for amount before creating expense
 }

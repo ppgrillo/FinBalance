@@ -104,40 +104,30 @@ export const authService = {
 
           if (error) throw error;
           session = data.session;
-          console.log("AuthService: getSession result:", session ? "Session Found" : "No Session");
         } catch (e) {
           console.warn("Session check failed:", e);
           return null;
         }
       }
 
-      if (!session?.user) {
-        console.log("AuthService: No user in session");
-        return null;
-      }
+      if (!session?.user) return null;
 
       const user = session.user;
-      console.log("AuthService: User ID:", user.id);
 
-      // 2. Fetch DB Profile with strict timeout
+      // 2. Fetch DB Profile (Fast Path: 2s timeout)
       let profile = null;
       try {
         const dbTimeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('DB timeout')), 3000)
+          setTimeout(() => reject(new Error('DB timeout')), 2000)
         );
 
-        console.log("AuthService: Fetching profile...");
         const { data, error } = await Promise.race([
-          supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .maybeSingle(),
+          supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
           dbTimeout
         ]) as any;
 
         if (!error && data) {
-          console.log("AuthService: Profile found");
+          console.log("AuthService: Profile loaded from DB");
           profile = data;
           // Update local storage
           const newSettings = {
@@ -147,24 +137,12 @@ export const authService = {
             currency: data.currency
           };
           localStorage.setItem('user_settings', JSON.stringify(newSettings));
-        } else if (!data && !error) {
-          console.log("AuthService: No profile found, creating default");
-          // Create default profile if missing
-          const defaultSettings = {
-            monthlyLimit: 10000,
-            periodType: 'Mensual' as any,
-            periodStartDay: 1,
-            currency: 'MXN'
-          };
-          // Don't await this, let it happen in background to avoid blocking UI
-          dbService.updateUserProfile(user.id, defaultSettings).catch(console.error);
-          profile = { ...defaultSettings, full_name: user.user_metadata.full_name };
         }
-      } catch (profileError) {
-        console.warn("Profile fetch failed or timed out, using defaults:", profileError);
+      } catch (e) {
+        console.warn("AuthService: DB fetch timed out, using local/defaults");
       }
 
-      // 3. Construct User Object (Always return user if session exists)
+      // 3. Construct User Object (Use Profile -> Local Storage -> Defaults)
       let localSettings: any = {};
       try {
         const stored = localStorage.getItem('user_settings');
@@ -181,12 +159,59 @@ export const authService = {
         periodStartDay: profile?.period_start_day ? Number(profile.period_start_day) : (localSettings.periodStartDay || 1)
       };
 
-      console.log("AuthService: Returning user object");
       return finalUser;
 
     } catch (error) {
       console.error("Auth check critical failure", error);
       return null;
+    }
+  },
+
+  forceRefreshUserProfile: async (userId: string): Promise<User | null> => {
+    try {
+      console.log("AuthService: forceRefreshUserProfile called for userId:", userId);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+      if (!data) throw new Error("No se encontró el perfil en la base de datos.");
+
+      console.log("AuthService: Profile refreshed:", data);
+
+      // Update local storage
+      const newSettings = {
+        monthlyLimit: Number(data.monthly_limit),
+        periodType: data.period_type,
+        periodStartDay: Number(data.period_start_day),
+        currency: data.currency
+      };
+      localStorage.setItem('user_settings', JSON.stringify(newSettings));
+
+      // Re-fetch the full user object to ensure all parts are updated
+      // Construct User Object directly to avoid redundant DB calls/timeouts
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return null;
+
+      const user = session.user;
+      const finalUser: User = {
+        id: user.id,
+        email: user.email!,
+        name: data.full_name || user.user_metadata.full_name || 'Usuario',
+        currency: data.currency || 'MXN',
+        monthlyLimit: Number(data.monthly_limit),
+        periodType: data.period_type,
+        periodStartDay: Number(data.period_start_day)
+      };
+
+      console.log("AuthService: forceRefreshUserProfile returning:", finalUser);
+      return finalUser;
+
+    } catch (error: any) {
+      console.error("Force Refresh Error:", error);
+      throw new Error(error.message || "Error al descargar datos del perfil.");
     }
   }
 };

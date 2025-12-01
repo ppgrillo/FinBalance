@@ -23,7 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
   };
 
   const navItems = [
-    { path: '/', icon: Icons.Home, label: 'Inicio' },
+    { path: '/dashboard', icon: Icons.Home, label: 'Dashboard' },
     { path: '/wallet', icon: Icons.CreditCard, label: 'Billetera' },
     { path: '/expenses', icon: Icons.List, label: 'Movimientos' },
     { path: '/budgets', icon: Icons.Wallet, label: 'Presupuestos' },
@@ -66,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
 
         <nav className="flex-1 px-4 space-y-2 overflow-y-auto custom-scrollbar">
           <Link
-            to="/add"
+            to="/"
             onClick={onClose}
             className="flex items-center gap-3 bg-primary text-white p-4 rounded-xl font-semibold shadow-lg hover:bg-purple-600 transition-all mb-6 group"
           >

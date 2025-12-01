@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { subscriptionService } from '../services/subscriptionService';
 import { Icons } from './Icons';
+import { useToast } from '../context/ToastContext';
 
 interface PaywallProps {
     onClose: () => void;
@@ -8,6 +9,7 @@ interface PaywallProps {
 }
 
 export const Paywall: React.FC<PaywallProps> = ({ onClose, onSuccess }) => {
+    const { success, error } = useToast();
     const [packages, setPackages] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -23,9 +25,9 @@ export const Paywall: React.FC<PaywallProps> = ({ onClose, onSuccess }) => {
 
     const handlePurchase = async (pkg: any) => {
         setLoading(true);
-        const success = await subscriptionService.purchase(pkg);
-        if (success) {
-            alert("¡Gracias por tu compra! 🌟");
+        const isSuccess = await subscriptionService.purchase(pkg);
+        if (isSuccess) {
+            success("¡Gracias por tu compra! 🌟");
             onSuccess();
         } else {
             setLoading(false);
@@ -34,12 +36,12 @@ export const Paywall: React.FC<PaywallProps> = ({ onClose, onSuccess }) => {
 
     const handleRestore = async () => {
         setLoading(true);
-        const success = await subscriptionService.restorePurchases();
-        if (success) {
-            alert("Compras restauradas correctamente.");
+        const isSuccess = await subscriptionService.restorePurchases();
+        if (isSuccess) {
+            success("Compras restauradas correctamente.");
             onSuccess();
         } else {
-            alert("No se encontraron compras activas.");
+            error("No se encontraron compras activas.");
             setLoading(false);
         }
     };

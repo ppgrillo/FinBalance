@@ -15,6 +15,7 @@ import { ToastProvider } from './context/ToastContext';
 import { Goals } from './pages/Goals';
 import { Categories } from './pages/Categories';
 import { Wallet } from './pages/Wallet';
+import { AccountDetails } from './pages/AccountDetails';
 import { authService } from './services/authService';
 import { User } from './types';
 import { supabase } from './lib/supabaseClient';
@@ -65,11 +66,35 @@ export default function App() {
       await refreshUser();
       console.log("App: checkSession done, setting initializing false");
       setInitializing(false);
+
+      // Background Sync: Ensure profile data is fresh after initial load
+      // Retry logic to handle mobile network latency
+      const syncProfile = async (retries = 3, delay = 2000) => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            console.log(`App: Background sync attempt (retries left: ${retries})`);
+            const updatedUser = await authService.forceRefreshUserProfile(session.user.id);
+            if (updatedUser) {
+              console.log("App: Background sync successful", updatedUser);
+              setUser(updatedUser);
+            }
+          }
+        } catch (e) {
+          console.warn(`App: Background sync failed (retries left: ${retries})`, e);
+          if (retries > 0) {
+            setTimeout(() => syncProfile(retries - 1, delay * 1.5), delay);
+          }
+        }
+      };
+
+      // Start sync with a small initial delay to allow network to settle
+      setTimeout(() => syncProfile(), 1000);
     };
 
     checkSession();
 
-    // Safety fallback: If Supabase hangs, force app to load after 5 seconds
+    // Safety fallback: If Supabase hangs, force app to load after 10 seconds
     const safetyTimer = setTimeout(() => {
       setInitializing(prev => {
         if (prev) {
@@ -78,7 +103,7 @@ export default function App() {
         }
         return prev;
       });
-    }, 5000);
+    }, 10000);
 
     // Listen for Auth Changes (Login, Logout, Token Refresh)
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -131,38 +156,38 @@ export default function App() {
     };
   }, []);
 
-  if (initializing) return (
-    <div className="h-screen w-screen flex flex-col items-center justify-center bg-background text-primary font-bold gap-4">
-      <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-      <p>Cargando FinBalance...</p>
-    </div>
-  );
-
-  if (!user) {
-    return <Onboarding onLogin={setUser} />;
-  }
-
   return (
     <ToastProvider>
-      <Router>
-        <Layout mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen}>
-          <Routes>
-            <Route path="/" element={<Dashboard user={user} onMenuClick={() => setMobileMenuOpen(true)} />} />
-            <Route path="/budgets" element={<Budgets user={user} />} />
-            <Route path="/recurring" element={<RecurringExpenses />} />
-            <Route path="/expenses" element={<ExpensesList />} />
-            <Route path="/add" element={<AddExpense />} />
-            <Route path="/stats" element={<Stats user={user} />} />
-            <Route path="/chat" element={<ChatAI />} />
-            <Route path="/profile" element={<Profile user={user} onUpdate={refreshUser} />} />
-            <Route path="/goals" element={<Goals />} />
-            <Route path="/categories" element={<Categories />} />
-            <Route path="/wallet" element={<Wallet />} />
-            <Route path="/login" element={<Navigate to="/" />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Layout>
-      </Router>
+      {initializing ? (
+        <div className="h-screen w-screen flex flex-col items-center justify-center bg-background text-primary font-bold gap-4">
+          <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+          <p>Cargando FinBalance...</p>
+        </div>
+      ) : !user ? (
+        <Onboarding onLogin={setUser} />
+      ) : (
+        <Router>
+          <Layout mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen}>
+            <Routes>
+              <Route path="/" element={<AddExpense />} />
+              <Route path="/dashboard" element={<Dashboard user={user} onMenuClick={() => setMobileMenuOpen(true)} />} />
+              <Route path="/budgets" element={<Budgets user={user} />} />
+              <Route path="/recurring" element={<RecurringExpenses />} />
+              <Route path="/expenses" element={<ExpensesList />} />
+              <Route path="/add" element={<Navigate to="/" replace />} />
+              <Route path="/stats" element={<Stats user={user} />} />
+              <Route path="/chat" element={<ChatAI />} />
+              <Route path="/profile" element={<Profile user={user} onUpdate={refreshUser} />} />
+              <Route path="/goals" element={<Goals />} />
+              <Route path="/categories" element={<Categories />} />
+              <Route path="/wallet" element={<Wallet />} />
+              <Route path="/wallet/:id" element={<AccountDetails />} />
+              <Route path="/login" element={<Navigate to="/" />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Layout>
+        </Router>
+      )}
     </ToastProvider>
   );
 }

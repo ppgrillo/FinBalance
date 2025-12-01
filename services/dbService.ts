@@ -231,20 +231,26 @@ export const dbService = {
   /**
    * Create a new category
    */
-  createCategory: async (name: string, type: 'expense' | 'income' = 'expense'): Promise<any> => {
+  createCategory: async (name: string, icon: string = 'Tag', color: string = '#6366f1', type: 'expense' | 'income' = 'expense'): Promise<any> => {
     // Check if exists
     const { data: existing } = await supabase
       .from('categories')
       .select('id')
       .ilike('name', name)
       .eq('type', type)
-      .single();
+      .maybeSingle(); // Fixed: use maybeSingle to avoid 406
 
     if (existing) return existing;
 
     const { data, error } = await supabase
       .from('categories')
-      .insert([{ name, type, user_id: (await supabase.auth.getUser()).data.user?.id }])
+      .insert([{
+        name,
+        type,
+        color,
+        icon,
+        user_id: (await supabase.auth.getUser()).data.user?.id
+      }])
       .select()
       .single();
 
@@ -290,10 +296,10 @@ export const dbService = {
         } else {
           const { data: shadow } = await supabase.from('categories').select('*').eq('name', name).eq('user_id', user.id).maybeSingle();
           if (shadow) await dbService.updateCategory(shadow.id, { color });
-          else await dbService.createCategory(name, 'expense');
+          else await dbService.createCategory(name, 'Tag', color, 'expense');
         }
       } else {
-        await dbService.createCategory(name, 'expense');
+        await dbService.createCategory(name, 'Tag', color, 'expense');
       }
     } catch (e) { console.error("Error ensuring category", e); }
   },
@@ -348,7 +354,7 @@ export const dbService = {
       const user = userResponse.data.user;
       if (!user) throw new Error('No authenticated user');
 
-      const { error } = await supabase.from('expenses').insert({
+      const { data, error } = await supabase.from('expenses').insert({
         user_id: user.id,
         amount: expense.amount,
         description: expense.description,
@@ -356,10 +362,12 @@ export const dbService = {
         date: expense.date,
         account_id: accountId,
         is_fixed: expense.isFixed || false
-      });
+      }).select().single();
 
       if (error) throw error;
       if (accountId) await dbService.updateBalance(accountId, expense.amount!, 'subtract');
+
+      return data;
     } catch (error) { throw error; }
   },
 
@@ -417,6 +425,52 @@ export const dbService = {
       if (expense.date !== undefined) updateData.date = expense.date;
       if (expense.isFixed !== undefined) updateData.is_fixed = expense.isFixed;
 
+      // Handle Account Change
+      if (expense.accountId) {
+        // 1. Get current expense to find old account
+        const { data: currentExp } = await supabase.from('expenses').select('account_id, amount').eq('id', id).single();
+
+        if (currentExp && currentExp.account_id !== expense.accountId) {
+          // 2. Revert old account (Add back if it was an expense)
+          // Note: expenses are stored as positive amounts usually, but let's be safe. 
+          // If it was an expense (positive amount in DB context usually implies spending), we add it back.
+          // Wait, addExpense subtracts. So here we ADD back to refund.
+          await dbService.updateBalance(currentExp.account_id, Number(currentExp.amount), 'add');
+
+          // 3. Apply to new account (Subtract)
+          // We use the NEW amount if provided, otherwise the OLD amount
+          const amountToDeduct = expense.amount !== undefined ? expense.amount : Number(currentExp.amount);
+          await dbService.updateBalance(expense.accountId, amountToDeduct, 'subtract');
+
+          updateData.account_id = expense.accountId;
+        } else if (currentExp && currentExp.account_id === expense.accountId && expense.amount !== undefined) {
+          // Same account, but amount changed. Adjust difference.
+          const oldAmount = Number(currentExp.amount);
+          const newAmount = expense.amount;
+          const diff = newAmount - oldAmount;
+          // If new is higher (e.g. 100 -> 150), diff is 50. We need to subtract 50 more.
+          // If new is lower (e.g. 100 -> 80), diff is -20. We need to add 20 back.
+          if (diff > 0) {
+            await dbService.updateBalance(expense.accountId, diff, 'subtract');
+          } else {
+            await dbService.updateBalance(expense.accountId, Math.abs(diff), 'add');
+          }
+        }
+      } else if (expense.amount !== undefined) {
+        // Account didn't change, but amount did. We need the account ID to adjust.
+        const { data: currentExp } = await supabase.from('expenses').select('account_id, amount').eq('id', id).single();
+        if (currentExp && currentExp.account_id) {
+          const oldAmount = Number(currentExp.amount);
+          const newAmount = expense.amount;
+          const diff = newAmount - oldAmount;
+          if (diff > 0) {
+            await dbService.updateBalance(currentExp.account_id, diff, 'subtract');
+          } else {
+            await dbService.updateBalance(currentExp.account_id, Math.abs(diff), 'add');
+          }
+        }
+      }
+
       const { error } = await supabase.from('expenses').update(updateData).eq('id', id);
       if (error) throw error;
     } catch (error) { throw error; }
@@ -424,6 +478,44 @@ export const dbService = {
 
   deleteExpense: async (id: string) => {
     try {
+      // 1. Get expense details before deleting
+      const { data: expense } = await supabase.from('expenses').select('*').eq('id', id).single();
+
+      if (expense) {
+        // 2. Handle Transfers
+        if (expense.category_name === 'Transferencia') {
+          // Parse description: "Transferencia: $500 de Ahorro a Efectivo"
+          const match = expense.description.match(/Transferencia: \$(\d+(\.\d+)?) de (.+) a (.+)/);
+          if (match) {
+            const amount = Number(match[1]);
+            const fromName = match[3];
+            const toName = match[4];
+
+            // Find accounts by name
+            const { data: accounts } = await supabase.from('accounts').select('id, name');
+            const fromAccount = accounts?.find(a => a.name === fromName);
+            const toAccount = accounts?.find(a => a.name === toName);
+
+            if (fromAccount && toAccount) {
+              // Revert transfer: Add back to Source, Subtract from Dest
+              await dbService.updateBalance(fromAccount.id, amount, 'add');
+              await dbService.updateBalance(toAccount.id, amount, 'subtract');
+            }
+          }
+        }
+        // 3. Handle Regular Expenses/Income
+        else if (expense.account_id) {
+          const amount = Number(expense.amount);
+          // If amount > 0 (Expense), we ADD it back to refund.
+          // If amount < 0 (Income), we SUBTRACT it to remove the income.
+          if (amount > 0) {
+            await dbService.updateBalance(expense.account_id, amount, 'add');
+          } else {
+            await dbService.updateBalance(expense.account_id, Math.abs(amount), 'subtract');
+          }
+        }
+      }
+
       const { error } = await supabase.from('expenses').delete().eq('id', id);
       if (error) throw error;
     } catch (error) { throw error; }
@@ -662,13 +754,16 @@ export const dbService = {
       const userResponse = await supabase.auth.getUser();
       const user = userResponse.data.user;
       if (!user) throw new Error('No authenticated user');
-      const { error } = await supabase.from('budgets').insert({
+
+      // Use upsert to prevent 409 Conflict
+      const { error } = await supabase.from('budgets').upsert({
         user_id: user.id,
         category_name: category,
         limit_amount: limit,
         period_month: new Date().getMonth() + 1,
         period_year: new Date().getFullYear()
-      });
+      }, { onConflict: 'user_id, category_name, period_month, period_year' });
+
       if (error) throw error;
       if (color) await dbService.ensureCategoryExists(category, color);
     } catch (error) { throw error; }
@@ -733,6 +828,21 @@ export const dbService = {
   updateRecurringExpenseDate: async (id: string, nextDate: string) => {
     try {
       const { error } = await supabase.from('recurring_expenses').update({ next_date: nextDate }).eq('id', id);
+      if (error) throw error;
+    } catch (error) { throw error; }
+  },
+
+  updateRecurringExpense: async (id: string, item: Partial<RecurringItem>) => {
+    try {
+      const updateData: any = {};
+      if (item.name) updateData.name = item.name;
+      if (item.amount) updateData.amount = item.amount;
+      if (item.category) updateData.category_name = item.category;
+      if (item.frequency) updateData.frequency = item.frequency;
+      if (item.nextDate) updateData.next_date = item.nextDate;
+      if (item.isVariable !== undefined) updateData.is_variable = item.isVariable;
+
+      const { error } = await supabase.from('recurring_expenses').update(updateData).eq('id', id);
       if (error) throw error;
     } catch (error) { throw error; }
   },

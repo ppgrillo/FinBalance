@@ -6,6 +6,7 @@ import { dbService } from '../services/dbService';
 import { expenseService } from '../services/expenseService';
 import { useToast } from '../context/ToastContext';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { EditExpenseModal } from '../components/EditExpenseModal';
 
 interface Props {
     user: User;
@@ -568,17 +569,17 @@ export const Dashboard: React.FC<Props> = ({ user, onMenuClick }) => {
                         )}
                     </div>
 
-                    <Link to="/add" className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between group hover:bg-gray-50 transition-colors border border-gray-50 h-[80px]">
+                    <Link to="/add" className="bg-yellow-400 p-4 rounded-2xl shadow-md flex items-center justify-between group hover:bg-yellow-300 transition-colors border border-yellow-500/20 h-[80px]">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                                <Icons.Add size={20} />
+                            <div className="w-10 h-10 bg-white/30 text-yellow-900 rounded-full flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform backdrop-blur-sm">
+                                <Icons.Add size={24} />
                             </div>
                             <div>
-                                <h3 className="font-bold text-textPrimary text-sm">Nuevo Gasto</h3>
-                                <p className="text-xs text-textSecondary">Registrar compra</p>
+                                <h3 className="font-bold text-yellow-900 text-sm">Nuevo Gasto</h3>
+                                <p className="text-xs text-yellow-800/80 font-medium">Registrar compra</p>
                             </div>
                         </div>
-                        <Icons.ArrowUpRight size={18} className="text-gray-300 group-hover:text-primary transition-colors" />
+                        <Icons.ArrowUpRight size={20} className="text-yellow-900/50 group-hover:text-yellow-900 transition-colors" />
                     </Link>
                 </div>
             </div>
@@ -626,21 +627,37 @@ export const Dashboard: React.FC<Props> = ({ user, onMenuClick }) => {
                     {expenses.slice(0, 4).map((exp, i) => (
                         <div
                             key={exp.id}
-                            onClick={() => handleExpenseClick(exp)}
-                            className={`flex items-center justify-between p-4 cursor-pointer ${i !== expenses.length - 1 ? 'border-b border-gray-50' : ''} hover:bg-gray-50 transition-colors`}
+                            className={`flex items-center justify-between p-4 ${i !== expenses.length - 1 ? 'border-b border-gray-50' : ''} hover:bg-gray-50 transition-colors group relative`}
                         >
-                            <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="flex items-center gap-3 overflow-hidden" onClick={() => handleExpenseClick(exp)}>
                                 <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-gray-400 shrink-0">
                                     <Icons.Wallet size={18} />
                                 </div>
-                                <div className="min-w-0">
+                                <div className="min-w-0 cursor-pointer">
                                     <p className="font-medium text-textPrimary text-sm truncate pr-2">{exp.description}</p>
                                     <p className="text-xs text-textSecondary">{new Date(exp.date).toLocaleDateString()}</p>
                                 </div>
                             </div>
-                            <span className={`font-semibold shrink-0 ${exp.amount > 0 ? 'text-red-400' : 'text-green-500'}`}>
-                                {exp.amount > 0 ? '-' : '+'}${Math.abs(exp.amount)}
-                            </span>
+
+                            <div className="flex items-center gap-3">
+                                <span className={`font-semibold shrink-0 ${exp.amount > 0 ? 'text-red-400' : 'text-green-500'}`}>
+                                    {exp.amount > 0 ? '-' : '+'}${Math.abs(exp.amount)}
+                                </span>
+                                <div className="flex gap-1">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleExpenseClick(exp); }}
+                                        className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg"
+                                    >
+                                        <Icons.Edit size={16} />
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(exp.id); }}
+                                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                                    >
+                                        <Icons.Trash size={16} />
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     ))}
                     {expenses.length === 0 && (
@@ -778,58 +795,28 @@ export const Dashboard: React.FC<Props> = ({ user, onMenuClick }) => {
                 </div>
             )}
 
-            {selectedExpense && (
-                <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in">
-                        <div className="flex justify-between items-start mb-6">
-                            <h2 className="text-xl font-bold">Detalle</h2>
-                            <button onClick={() => setSelectedExpense(null)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600">
-                                <Icons.Close size={20} />
-                            </button>
-                        </div>
-
-                        <div className="flex flex-col items-center mb-8">
-                            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                                <Icons.Wallet size={40} className="text-gray-400" />
-                            </div>
-                            <h3 className={`text-3xl font-bold ${selectedExpense.amount > 0 ? 'text-textPrimary' : 'text-green-500'}`}>
-                                ${Math.abs(selectedExpense.amount)}
-                            </h3>
-                            <p className="text-textSecondary">{selectedExpense.category}</p>
-                        </div>
-
-                        <div className="bg-gray-50 rounded-xl p-4 mb-6 space-y-3">
-                            <div className="flex justify-between">
-                                <span className="text-sm text-gray-500">Descripción</span>
-                                <span className="text-sm font-medium text-textPrimary text-right">{selectedExpense.description}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-sm text-gray-500">Fecha</span>
-                                <span className="text-sm font-medium text-textPrimary">{new Date(selectedExpense.date).toLocaleDateString()}</span>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={() => handleDelete(selectedExpense.id)}
-                            className="w-full py-3 rounded-xl font-semibold border border-red-200 text-red-500 hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
-                        >
-                            <Icons.Trash size={18} />
-                            Eliminar
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            <ConfirmModal
-                isOpen={confirmModal.isOpen}
-                title={confirmModal.title}
-                message={confirmModal.message}
-                type={confirmModal.type}
-                onConfirm={confirmModal.onConfirm}
-                onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                confirmText="Sí, continuar"
-                cancelText="Cancelar"
+            <EditExpenseModal
+                isOpen={!!selectedExpense}
+                onClose={() => setSelectedExpense(null)}
+                expense={selectedExpense}
+                onSave={loadData}
             />
-        </div>
+
+
+            {
+                confirmModal.isOpen && (
+                    <ConfirmModal
+                        isOpen={confirmModal.isOpen}
+                        title={confirmModal.title}
+                        message={confirmModal.message}
+                        type={confirmModal.type}
+                        onConfirm={confirmModal.onConfirm}
+                        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                        confirmText="Sí, continuar"
+                        cancelText="Cancelar"
+                    />
+                )
+            }
+        </div >
     );
 };

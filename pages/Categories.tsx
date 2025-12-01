@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import { Icons } from '../components/Icons';
 import { Expense } from '../types';
+import { useToast } from '../context/ToastContext';
 
 export const Categories: React.FC = () => {
+    const { success, error } = useToast();
     const [activeTab, setActiveTab] = useState<'expense' | 'income'>('expense');
     const [categories, setCategories] = useState<{ id: string, name: string, type: string, color?: string }[]>([]);
     const [loading, setLoading] = useState(true);
@@ -76,11 +78,13 @@ export const Categories: React.FC = () => {
                     color: newColor,
                     type: newType
                 });
+                success("Categoría actualizada");
             } else {
                 const newCat = await dbService.createCategory(newName, activeTab);
                 if (newCat && newCat.id) {
                     await dbService.updateCategory(newCat.id, { color: newColor });
                 }
+                success("Categoría creada");
             }
             setShowAddModal(false);
             setEditingCategory(null);
@@ -88,7 +92,7 @@ export const Categories: React.FC = () => {
             setNewColor('#A88BEB');
             loadData();
         } catch (e) {
-            alert("Error al guardar categoría");
+            error("Error al guardar categoría");
         }
     };
 
@@ -98,8 +102,9 @@ export const Categories: React.FC = () => {
         try {
             await dbService.deleteCategory(id);
             loadData();
+            success("Categoría eliminada");
         } catch (e) {
-            alert("Error al eliminar");
+            error("Error al eliminar");
         }
     };
 
@@ -314,8 +319,8 @@ export const Categories: React.FC = () => {
                                         <button
                                             type="button"
                                             className={`w-8 h-8 rounded-full flex items-center justify-center text-white transition-transform ${!colors.some(c => c.toLowerCase() === newColor.toLowerCase())
-                                                    ? 'scale-110 ring-2 ring-offset-2 ring-gray-300'
-                                                    : 'hover:scale-105'
+                                                ? 'scale-110 ring-2 ring-offset-2 ring-gray-300'
+                                                : 'hover:scale-105'
                                                 }`}
                                             style={{
                                                 background: !colors.some(c => c.toLowerCase() === newColor.toLowerCase())

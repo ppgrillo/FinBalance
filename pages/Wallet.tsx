@@ -1,10 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { Account, AccountType } from '../types';
 import { dbService } from '../services/dbService';
 import { Icons } from '../components/Icons';
+import { useToast } from '../context/ToastContext';
+import { useNavigate } from 'react-router-dom';
 
 export const Wallet: React.FC = () => {
+    const { success, error, warning } = useToast();
+    const navigate = useNavigate();
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -62,7 +65,7 @@ export const Wallet: React.FC = () => {
         e.preventDefault();
         console.log("Guardando cuenta...", editingId);
         if (!formAccount.name || formAccount.balance === undefined) {
-            alert("Por favor ingresa al menos el nombre y el saldo actual.");
+            warning("Por favor ingresa al menos el nombre y el saldo actual.");
             return;
         }
         setLoading(true);
@@ -75,20 +78,23 @@ export const Wallet: React.FC = () => {
                         parseFloat(calibrationBalance),
                         recordCalibration
                     );
+                    success("Cuenta calibrada exitosamente");
                 } else {
                     // Standard Update (Name, Color, etc.)
                     await dbService.updateAccount(editingId, formAccount);
+                    success("Cuenta actualizada");
                 }
             } else {
                 // Create New
                 await dbService.addAccount(formAccount);
+                success("Cuenta creada");
             }
 
             await loadAccounts();
             setIsModalOpen(false);
         } catch (e) {
             console.error("Save Error:", e);
-            alert('Error guardando cuenta. Verifica tu conexión.');
+            error('Error guardando cuenta. Verifica tu conexión.');
         } finally {
             setLoading(false);
         }
@@ -110,9 +116,10 @@ export const Wallet: React.FC = () => {
             console.log("Cuenta borrada exitosamente");
             await loadAccounts();
             setIsModalOpen(false);
+            success("Cuenta eliminada");
         } catch (error: any) {
             console.error("Delete error details:", error);
-            alert("Error al eliminar la cuenta: " + (error.message || "Intenta nuevamente."));
+            error("Error al eliminar la cuenta: " + (error.message || "Intenta nuevamente."));
         } finally {
             setLoading(false);
             setShowDeleteConfirm(false);
@@ -133,13 +140,20 @@ export const Wallet: React.FC = () => {
     const renderCard = (acc: Account) => (
         <div
             key={acc.id}
-            onClick={() => handleOpenEdit(acc)}
+            onClick={() => navigate(`/wallet/${acc.id}`)}
             className="relative overflow-hidden rounded-2xl p-6 text-white shadow-lg transition-transform hover:scale-[1.02] cursor-pointer group"
             style={{ backgroundColor: acc.color }}
         >
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10"></div>
-            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 p-1 rounded-full">
-                <Icons.Edit size={16} />
+
+            {/* Edit Button (Bottom Right) */}
+            <div className="absolute bottom-3 right-3 bg-black/20 p-2 rounded-full z-20">
+                <button
+                    onClick={(e) => { e.stopPropagation(); handleOpenEdit(acc); }}
+                    className="text-white hover:text-gray-200 flex items-center justify-center"
+                >
+                    <Icons.Edit size={14} />
+                </button>
             </div>
 
             <div className="relative z-10 flex flex-col h-32 justify-between">
@@ -170,9 +184,9 @@ export const Wallet: React.FC = () => {
                             <span>Disp: ${(acc.limit - acc.balance).toLocaleString()}</span>
                         </div>
                     ) : (
-                        <div className="h-4"></div> // Spacer
+                        <div className="h-4"></div>
                     )}
-                    <div className="text-right mt-2 h-5">
+                    <div className="text-left mt-2 h-5">
                         {acc.lastDigits && <span className="text-sm tracking-widest opacity-80">•••• {acc.lastDigits}</span>}
                     </div>
                 </div>
@@ -448,8 +462,9 @@ export const Wallet: React.FC = () => {
                                                         await dbService.setDefaultAccount(editingId);
                                                         await loadAccounts();
                                                         setIsModalOpen(false);
+                                                        success("Cuenta establecida como predeterminada");
                                                     } catch (e) {
-                                                        alert("Error al establecer como predeterminada");
+                                                        error("Error al establecer como predeterminada");
                                                     } finally {
                                                         setLoading(false);
                                                     }

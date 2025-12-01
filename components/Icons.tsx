@@ -36,7 +36,9 @@ import {
   Plus,
   Cloud,
   Shield,
-  Crown
+  Crown,
+  ArrowLeft,
+  Delete
 } from 'lucide-react';
 
 export const Icons = {
@@ -56,9 +58,11 @@ export const Icons = {
   Settings,
   Income: ArrowUpRight,
   Expense: ArrowDownRight,
+  Delete: Delete,
   Check,
   ArrowUpRight,
   ArrowDownRight,
+  ArrowLeft,
   Calendar,
   Edit: Edit2,
   Trash: Trash2,
